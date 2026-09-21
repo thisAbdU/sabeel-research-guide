@@ -1,0 +1,86 @@
+export type ChatMode = 'vent' | 'roast' | 'funding'
+export type MessageRole = 'user' | 'assistant' | 'system'
+export type SupportStatus = 'pending' | 'completed' | 'failed'
+
+export type PublicUser = {
+  id: string
+  email: string | null
+  displayName: string | null
+}
+
+export type Session = {
+  accessToken: string
+  refreshToken: string
+  expiresIn: number
+  expiresAt?: number
+}
+
+export type AuthResponse = {
+  user: PublicUser
+  session: Session | null
+}
+
+export type Conversation = {
+  id: string
+  userId: string
+  researchProjectId: string | null
+  mode: ChatMode
+  title: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type Message = {
+  id: string
+  conversationId: string
+  role: MessageRole
+  content: string
+  createdAt: string
+}
+
+export type ResearchProject = {
+  id: string
+  userId: string
+  title: string
+  summary: string | null
+  content: string | null
+  isPublished: boolean
+  publishedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type FundingMatch = {
+  id: string
+  researchProjectId: string
+  organizationName: string
+  programName: string | null
+  description: string | null
+  url: string | null
+  relevanceNote: string | null
+  relevanceScore: number | null
+  createdAt: string
+}
+
+export type SupportSettings = {
+  id: string
+  userId: string
+  researchProjectId: string
+  enabled: boolean
+  paymentProvider: string | null
+  paymentAccountId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type SupportTransaction = {
+  id: string
+  supportSettingsId: string
+  researchProjectId: string
+  supporterUserId: string | null
+  amount: number
+  currency: string
+  status: SupportStatus
+  providerPaymentId: string | null
+  createdAt: string
+}
