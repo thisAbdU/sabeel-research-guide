@@ -25,7 +25,8 @@ That creates `users`, `conversations`, `messages`, `research_projects`, `funding
 cp .env.example .env.local
 ```
 
-Fill in `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
+Fill in `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `AI_API_KEY`.
+`AI_BASE_URL` / `AI_MODEL` can stay on OpenAI, or point at any OpenAI-compatible provider.
 
 ```bash
 pnpm install
@@ -48,7 +49,7 @@ All other `/api/*` routes require a bearer token.
 | Method | Path | Notes |
 | --- | --- | --- |
 | GET | `/api/chat` | list conversations, or `?conversationId=` |
-| POST | `/api/chat` | save a user message (no model reply yet) |
+| POST | `/api/chat` | `{ mode, conversationId, message }` → AI reply |
 | GET | `/api/research` | own projects, or `?published=true` |
 | POST | `/api/research` | create |
 | GET/PATCH/DELETE | `/api/research/[id]` | |

@@ -1,7 +1,11 @@
 import { requireUser } from '@/lib/auth'
+import { completeChat, type ChatTurn } from '@/lib/ai/complete'
+import { validateChatRequest } from '@/lib/chat/validate'
 import { error, json, options, readBody } from '@/lib/http'
 import { toConversation, toMessage } from '@/lib/mappers'
-import type { ChatMode } from '@/lib/types'
+import type { ChatMode, ChatResponse } from '@/lib/types'
+
+const CONTEXT_LIMIT = 20
 
 export function OPTIONS() {
   return options()
@@ -51,18 +55,12 @@ export async function POST(request: Request) {
   const auth = await requireUser(request)
   if (!auth.ok) return auth.response
 
-  const body = await readBody<{
-    conversationId?: string
-    researchProjectId?: string
-    mode?: ChatMode
-    content?: string
-  }>(request)
+  const parsed = validateChatRequest(await readBody(request))
+  if (!parsed.ok) return error(parsed.error)
 
-  const content = body?.content?.trim()
-  if (!content) return error('content is required')
-
-  let conversationId = body?.conversationId
-  let mode = body?.mode
+  let conversationId = parsed.conversationId
+  let mode: ChatMode = parsed.mode
+  let history: ChatTurn[] = []
 
   if (conversationId) {
     const { data: existing, error: existingError } = await auth.supabase
@@ -73,43 +71,82 @@ export async function POST(request: Request) {
 
     if (existingError) return error(existingError.message, 500)
     if (!existing) return error('Conversation not found', 404)
-    mode = existing.mode
-  } else {
-    if (!mode || !['vent', 'roast', 'funding'].includes(mode)) {
-      return error('mode must be vent, roast, or funding')
+    if (existing.mode !== parsed.mode) {
+      return error(`This conversation is in ${existing.mode} mode`)
     }
+    mode = existing.mode
 
+    const { data: prior, error: historyError } = await auth.supabase
+      .from('messages')
+      .select('role, content')
+      .eq('conversation_id', conversationId)
+      .in('role', ['user', 'assistant'])
+      .order('created_at', { ascending: false })
+      .limit(CONTEXT_LIMIT)
+
+    if (historyError) return error(historyError.message, 500)
+    history = (prior ?? []).reverse() as ChatTurn[]
+  }
+
+  let assistant
+  try {
+    assistant = await completeChat(mode, history, parsed.message)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'AI provider failed'
+    const missingKey = message.includes('AI_API_KEY')
+    return error(missingKey ? 'AI is not configured' : 'AI provider failed', missingKey ? 503 : 502)
+  }
+
+  if (!conversationId) {
     const { data: created, error: createError } = await auth.supabase
       .from('conversations')
       .insert({
         user_id: auth.user.id,
-        research_project_id: body?.researchProjectId ?? null,
         mode,
-        title: content.slice(0, 80),
+        title: parsed.message.slice(0, 80),
       })
-      .select('*')
+      .select('id')
       .single()
 
     if (createError || !created) return error(createError?.message ?? 'Could not create conversation', 500)
     conversationId = created.id
   }
 
-  const { data: message, error: messageError } = await auth.supabase
+  if (!conversationId) return error('Could not create conversation', 500)
+
+  if (parsed.conversationId) {
+    await auth.supabase
+      .from('conversations')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', conversationId)
+  }
+
+  const { data: rows, error: persistError } = await auth.supabase
     .from('messages')
-    .insert({
-      conversation_id: conversationId,
-      role: 'user',
-      content,
-    })
-    .select('*')
-    .single()
+    .insert([
+      { conversation_id: conversationId, role: 'user', content: parsed.message },
+      { conversation_id: conversationId, role: 'assistant', content: assistant.content },
+    ])
+    .select('id, role, content, created_at')
 
-  if (messageError || !message) return error(messageError?.message ?? 'Could not save message', 500)
+  if (persistError || !rows) return error(persistError?.message ?? 'Could not save messages', 500)
 
-  // ponytail: persist only; add model reply when chat generation is wired
-  return json({
-    conversationId,
-    mode,
-    message: toMessage(message),
-  }, 201)
+  const saved = rows.find((row) => row.role === 'assistant')
+  if (!saved) return error('Could not save assistant message', 500)
+
+  const response: ChatResponse = {
+    data: {
+      conversationId,
+      message: {
+        id: saved.id,
+        role: 'assistant',
+        content: saved.content,
+        createdAt: saved.created_at,
+      },
+      sources: [],
+      researchDirections: assistant.researchDirections,
+    },
+  }
+
+  return json(response)
 }

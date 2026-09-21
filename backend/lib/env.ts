@@ -10,3 +10,11 @@ export function supabaseEnv() {
     anonKey: required('SUPABASE_ANON_KEY'),
   }
 }
+
+export function aiEnv() {
+  return {
+    baseUrl: (process.env.AI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, ''),
+    apiKey: required('AI_API_KEY'),
+    model: process.env.AI_MODEL ?? 'gpt-4o-mini',
+  }
+}

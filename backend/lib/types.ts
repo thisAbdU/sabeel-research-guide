@@ -1,5 +1,37 @@
 export type ChatMode = 'vent' | 'roast' | 'funding'
 export type MessageRole = 'user' | 'assistant' | 'system'
+
+export type ResearchSource = {
+  id: string
+  title: string
+  authors: string[]
+  summary?: string
+  url: string
+  source: string
+}
+
+export type ChatRequest = {
+  mode: ChatMode
+  conversationId: string | null
+  message: string
+}
+
+export type ChatReply = {
+  id: string
+  role: 'assistant'
+  content: string
+  createdAt: string
+}
+
+export type ChatResponse = {
+  data: {
+    conversationId: string
+    message: ChatReply
+    sources: ResearchSource[]
+    researchDirections: string[]
+  }
+}
+
 export type SupportStatus = 'pending' | 'completed' | 'failed'
 
 export type PublicUser = {
