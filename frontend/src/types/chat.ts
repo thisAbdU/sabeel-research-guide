@@ -12,6 +12,30 @@ export interface ResearchSource {
   year?: string;
 }
 
+export interface ResearchDirection {
+  title: string;
+  description: string;
+  researchQuestion: string;
+}
+
+export interface ChatRequestPayload {
+  mode: ChatMode;
+  conversationId: string | null;
+  message: string;
+}
+
+export interface ChatResponseData {
+  conversationId: string;
+  message: {
+    id: string;
+    role: 'assistant';
+    content: string;
+    createdAt: string;
+  };
+  sources: ResearchSource[];
+  researchDirections: ResearchDirection[];
+}
+
 export interface ChatMessageItem {
   id: string;
   role: MessageRole;
@@ -19,7 +43,7 @@ export interface ChatMessageItem {
   createdAt: string | Date;
   mode: ChatMode;
   sources?: ResearchSource[];
-  researchDirections?: string[];
+  researchDirections?: (ResearchDirection | string)[];
   isError?: boolean;
 }
 

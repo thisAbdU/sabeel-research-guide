@@ -11,8 +11,8 @@ interface TypingIndicatorProps {
 export function TypingIndicator({ mode = "vent" }: TypingIndicatorProps) {
   const modeLabels: Record<ChatMode, string> = {
     vent: "Synthesizing research directions...",
-    roast: "Critiquing variables and methodology...",
-    funding: "Matching potential funding programs...",
+    roast: "Examining your research idea...",
+    funding: "Looking for potential funding matches...",
   };
 
   return (

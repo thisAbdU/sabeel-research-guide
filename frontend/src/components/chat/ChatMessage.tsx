@@ -104,16 +104,42 @@ export function ChatMessage({ message }: ChatMessageProps) {
             </div>
           )}
 
-          {/* Research Directions Pills (if any) */}
+          {/* Research Directions (if any) */}
           {message.researchDirections && message.researchDirections.length > 0 && (
-            <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
+            <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2.5">
               <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
                 Suggested Research Directions:
               </span>
-              <ul className="list-disc pl-4 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
-                {message.researchDirections.map((dir, idx) => (
-                  <li key={idx}>{dir}</li>
-                ))}
+              <ul className="space-y-2 text-xs text-zinc-600 dark:text-zinc-400">
+                {message.researchDirections.map((dir, idx) => {
+                  if (typeof dir === "string") {
+                    return (
+                      <li key={idx} className="list-disc ml-4">
+                        {dir}
+                      </li>
+                    );
+                  }
+                  return (
+                    <li
+                      key={idx}
+                      className="rounded-lg border border-zinc-200/80 bg-zinc-50/50 p-2.5 dark:border-zinc-800 dark:bg-zinc-800/40"
+                    >
+                      <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                        {dir.title}
+                      </div>
+                      {dir.description && (
+                        <div className="mt-0.5 text-zinc-600 dark:text-zinc-400">
+                          {dir.description}
+                        </div>
+                      )}
+                      {dir.researchQuestion && (
+                        <div className="mt-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 italic">
+                          Q: {dir.researchQuestion}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

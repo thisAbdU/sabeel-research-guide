@@ -10,10 +10,10 @@ import {
   BookOpen,
   Info,
   RotateCcw,
-  Plus,
-  AlertTriangle,
+  AlertCircle,
   Lock,
   Loader2,
+  X,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { ChatMessage } from "@/components/chat/ChatMessage";
@@ -24,58 +24,27 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChatMode, ChatMessageItem, ResearchSource } from "@/types/chat";
 import { useAuth } from "@/context/AuthContext";
+import { sendChatMessage, ChatApiError } from "@/services/chat";
 
 export default function ChatPage() {
   const router = useRouter();
-  const { user, isLoading: authLoading, displayName } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+
   const [currentMode, setCurrentMode] = React.useState<ChatMode>("vent");
+  const [conversationId, setConversationId] = React.useState<string | null>(null);
   const [messages, setMessages] = React.useState<ChatMessageItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [sessionSources, setSessionSources] = React.useState<ResearchSource[]>([]);
+  const [errorBanner, setErrorBanner] = React.useState<string | null>(null);
+
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
+  // Redirect unauthenticated users to /login
   React.useEffect(() => {
     if (!authLoading && !user) {
       router.push("/login");
     }
   }, [authLoading, user, router]);
-
-  if (authLoading) {
-    return (
-      <AppShell>
-        <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
-        </div>
-      </AppShell>
-    );
-  }
-
-  if (!user) {
-    return (
-      <AppShell>
-        <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center p-4">
-          <Card className="max-w-md p-6 text-center shadow-lg">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 mb-4">
-              <Lock className="h-6 w-6" />
-            </div>
-            <h2 className="text-lg font-bold text-zinc-950 dark:text-zinc-50">
-              Authentication Required
-            </h2>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              Sign in to access the ScholarXiv Companion and save your research sessions.
-            </p>
-            <div className="mt-5 flex gap-2 justify-center">
-              <Link href="/login">
-                <Button size="sm" className="rounded-xl gap-1.5">
-                  <span>Sign In to Continue</span>
-                </Button>
-              </Link>
-            </div>
-          </Card>
-        </div>
-      </AppShell>
-    );
-  }
 
   // Mode Configuration and Empty State Text
   const modeConfigs: Record<
@@ -85,7 +54,7 @@ export default function ChatPage() {
       headline: string;
       emptyStateQuote: string;
       suggestedPrompts: string[];
-      icon: any;
+      icon: React.ComponentType<{ className?: string }>;
     }
   > = {
     vent: {
@@ -130,116 +99,137 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  // Mock responses for Day 2 verification
-  const handleSendMessage = (content: string) => {
+  // Mode switching: resets conversation state to maintain backend consistency
+  const handleModeChange = (newMode: ChatMode) => {
+    if (newMode === currentMode) return;
+    setCurrentMode(newMode);
+    setConversationId(null);
+    setMessages([]);
+    setSessionSources([]);
+    setErrorBanner(null);
+  };
+
+  // Reset / New Session
+  const handleClearChat = () => {
+    setConversationId(null);
+    setMessages([]);
+    setSessionSources([]);
+    setErrorBanner(null);
+  };
+
+  // Real backend chat submission
+  const handleSendMessage = async (content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed || isLoading) return;
+
+    setErrorBanner(null);
+
     const userMsg: ChatMessageItem = {
       id: `user-${Date.now()}`,
       role: "user",
-      content,
+      content: trimmed,
       createdAt: new Date(),
       mode: currentMode,
     };
 
+    // Optimistically show user message immediately
     setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
 
-    // Simulate mock assistant reply based on active mode
-    setTimeout(() => {
-      let mockReply: ChatMessageItem;
+    try {
+      const result = await sendChatMessage({
+        mode: currentMode,
+        conversationId,
+        message: trimmed,
+      });
 
-      if (currentMode === "vent") {
-        const source1: ResearchSource = {
-          id: `src-${Date.now()}-1`,
-          title: "Adaptive Learning Interventions and Educational Disparities in Sub-Saharan Africa",
-          authors: ["E. Kidane", "A. Worku", "T. Girmay"],
-          summary:
-            "A longitudinal study evaluating the integration of generative AI tutoring systems across Ethiopian STEM university departments, identifying distinct variable outcomes in low-bandwidth settings.",
-          url: "https://arxiv.org",
-          source: "ScholarXiv / cs.AI",
-          year: "2024",
-        };
-
-        mockReply = {
-          id: `asst-${Date.now()}`,
-          role: "assistant",
-          content:
-            "That's a fertile area of research. To convert this from a general topic into a focused, publishable investigation, we should narrow your scope across three key dimensions:\n\n1. Target Cohort: Are you looking at undergraduate students, secondary school teachers, or administrative curriculum designers?\n\n2. Key Variables: Are you studying cognitive retention, study habit disruptions, or software interaction metrics?\n\n3. Regional Context: Situate your investigation in a specific geographic or institutional context (e.g. Jimma University or Addis Ababa).",
-          createdAt: new Date(),
-          mode: "vent",
-          sources: [source1],
-          researchDirections: [
-            "Impact of LLM tutoring on first-year computer science retention in Ethiopian public universities.",
-            "Teacher attitudes toward automated grading models in resource-constrained secondary schools.",
-            "Evaluating mobile smartphone usage policies and digital divide factors in rural universities.",
-          ],
-        };
-
-        setSessionSources((prev) => [source1, ...prev]);
-      } else if (currentMode === "roast") {
-        const source2: ResearchSource = {
-          id: `src-${Date.now()}-2`,
-          title: "Methodological Ambiguities in Social Media Usage and Academic Performance Literature",
-          authors: ["D. Chen", "M. Bekele"],
-          summary:
-            "A meta-analysis exposing common empirical flaws in educational social media studies, notably undefined exposure variables and lack of longitudinal cohort control.",
-          url: "https://arxiv.org",
-          source: "ScholarXiv / soc.QA",
-          year: "2025",
-        };
-
-        mockReply = {
-          id: `asst-${Date.now()}`,
-          role: "assistant",
-          content:
-            "Let's break down the critical vulnerabilities in this proposal before a thesis committee does:\n\n1. Ambiguous Variable: 'Social media' is too broad. Passive TikTok consumption is fundamentally different from active peer study groups on Telegram.\n\n2. Unmeasurable Scope: 'Students' without an age, field of study, or institutional bracket makes meaningful cohort comparison impossible.\n\n3. Better Alternative: A defensible formulation would be: 'The correlational relationship between short-form video consumption and sleep latency among undergraduate engineering students at Jimma University.'",
-          createdAt: new Date(),
-          mode: "roast",
-          sources: [source2],
-          researchDirections: [
-            "Narrow the independent variable to a single platform or behavioral frequency metric.",
-            "Define explicit quantitative measurement scales (e.g. Pittsburgh Sleep Quality Index).",
-          ],
-        };
-
-        setSessionSources((prev) => [source2, ...prev]);
-      } else {
-        mockReply = {
-          id: `asst-${Date.now()}`,
-          role: "assistant",
-          content:
-            "Based on your research focus, I have identified potential matching programs and institutional funders whose active grant priorities overlap with your study parameters:\n\n1. African Development Bank (AfDB) - Higher Education Science and Technology Fund.\n2. Mastercard Foundation - Scholars Program Research Innovation Grants.\n3. International Development Research Centre (IDRC) - Artificial Intelligence for Development (AI4D) Africa initiative.\n\nNote: These are potential matches, not guaranteed awards. You are encouraged to review the official calls and guidelines directly.",
-          createdAt: new Date(),
-          mode: "funding",
-          researchDirections: [
-            "Align methodology sections with AfDB priority indicators on youth tech employment.",
-            "Include explicit regional capacity-building metrics for IDRC grant requirements.",
-          ],
-        };
+      // Save returned conversation ID for subsequent turns
+      if (result.conversationId) {
+        setConversationId(result.conversationId);
       }
 
-      setMessages((prev) => [...prev, mockReply]);
+      // Add assistant response
+      const assistantMsg: ChatMessageItem = {
+        id: result.message.id || `asst-${Date.now()}`,
+        role: "assistant",
+        content: result.message.content,
+        createdAt: result.message.createdAt || new Date().toISOString(),
+        mode: currentMode,
+        sources: result.sources && result.sources.length > 0 ? result.sources : undefined,
+        researchDirections:
+          result.researchDirections && result.researchDirections.length > 0
+            ? result.researchDirections
+            : undefined,
+      };
+
+      setMessages((prev) => [...prev, assistantMsg]);
+
+      // Deduplicate and accumulate ScholarXiv sources in right drawer
+      if (result.sources && result.sources.length > 0) {
+        setSessionSources((prev) => {
+          const existingKeys = new Set(prev.map((s) => s.id || s.title));
+          const newSources = result.sources.filter((s) => !existingKeys.has(s.id || s.title));
+          return [...newSources, ...prev];
+        });
+      }
+    } catch (err) {
+      const errorMessage =
+        err instanceof ChatApiError
+          ? err.message
+          : "Something went wrong while processing your research request. Please try again.";
+
+      const errorMsg: ChatMessageItem = {
+        id: `err-${Date.now()}`,
+        role: "assistant",
+        content: errorMessage,
+        createdAt: new Date(),
+        mode: currentMode,
+        isError: true,
+      };
+
+      setMessages((prev) => [...prev, errorMsg]);
+      setErrorBanner(errorMessage);
+    } finally {
       setIsLoading(false);
-    }, 900);
+    }
   };
 
-  // Helper to trigger simulated error state for review
-  const handleSimulateError = () => {
-    const errorMsg: ChatMessageItem = {
-      id: `err-${Date.now()}`,
-      role: "assistant",
-      content:
-        "ScholarXiv literature retrieval service is temporarily unreachable. Please check your network connection or try a broader query.",
-      createdAt: new Date(),
-      mode: currentMode,
-      isError: true,
-    };
-    setMessages((prev) => [...prev, errorMsg]);
-  };
+  if (authLoading) {
+    return (
+      <AppShell>
+        <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+        </div>
+      </AppShell>
+    );
+  }
 
-  const handleClearChat = () => {
-    setMessages([]);
-    setSessionSources([]);
-  };
+  if (!user) {
+    return (
+      <AppShell>
+        <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center p-4">
+          <Card className="max-w-md p-6 text-center shadow-lg">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 mb-4">
+              <Lock className="h-6 w-6" />
+            </div>
+            <h2 className="text-lg font-bold text-zinc-950 dark:text-zinc-50">
+              Authentication Required
+            </h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              Sign in to access the ScholarXiv Companion and save your research sessions.
+            </p>
+            <div className="mt-5 flex gap-2 justify-center">
+              <Link href="/login">
+                <Button size="sm" className="rounded-xl gap-1.5">
+                  <span>Sign In to Continue</span>
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
@@ -273,19 +263,25 @@ export default function ChatPage() {
                 <span>New Session</span>
               </Button>
             )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSimulateError}
-              title="Test error state placeholder"
-              className="h-8 text-xs text-zinc-400 hover:text-zinc-700 rounded-lg"
-            >
-              <AlertTriangle className="h-3.5 w-3.5 mr-1" />
-              Test Error State
-            </Button>
           </div>
         </div>
+
+        {/* Global Error Banner (if error occurred) */}
+        {errorBanner && (
+          <div className="shrink-0 mt-3 flex items-center justify-between gap-2 rounded-xl border border-red-200 bg-red-50/80 px-3.5 py-2.5 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+              <span className="truncate">{errorBanner}</span>
+            </div>
+            <button
+              onClick={() => setErrorBanner(null)}
+              className="p-1 hover:text-red-950 dark:hover:text-white"
+              title="Dismiss"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Workspace: Left Chat Stream + Right Grounding Panel */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden min-h-0 pt-4">
@@ -323,7 +319,8 @@ export default function ChatPage() {
                         <button
                           key={idx}
                           onClick={() => handleSendMessage(prompt)}
-                          className="rounded-lg border border-zinc-200/90 bg-zinc-50/80 px-3 py-2 text-xs text-zinc-700 hover:border-zinc-400 hover:bg-white text-left transition-all dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300 dark:hover:bg-zinc-800 shadow-2xs"
+                          disabled={isLoading}
+                          className="rounded-lg border border-zinc-200/90 bg-zinc-50/80 px-3 py-2 text-xs text-zinc-700 hover:border-zinc-400 hover:bg-white text-left transition-all dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300 dark:hover:bg-zinc-800 shadow-2xs disabled:opacity-50"
                         >
                           {prompt}
                         </button>
@@ -338,7 +335,7 @@ export default function ChatPage() {
                     <ChatMessage key={msg.id} message={msg} />
                   ))}
 
-                  {/* Typing / Loading Indicator */}
+                  {/* Mode-Specific Typing / Loading Indicator */}
                   {isLoading && <TypingIndicator mode={currentMode} />}
                 </>
               )}
@@ -349,7 +346,7 @@ export default function ChatPage() {
             <div className="pt-2 pb-1 shrink-0">
               <ChatInput
                 currentMode={currentMode}
-                onModeChange={(mode) => setCurrentMode(mode)}
+                onModeChange={handleModeChange}
                 onSendMessage={handleSendMessage}
                 disabled={isLoading}
                 isLoading={isLoading}
