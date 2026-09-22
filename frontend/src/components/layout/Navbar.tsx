@@ -6,9 +6,13 @@ import { usePathname } from "next/navigation";
 import { Sparkles, Menu, X, Compass, MessageSquare, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
+import { useAuth } from "@/context/AuthContext";
+import { LogOut, User as UserIcon } from "lucide-react";
+
 export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const { user, displayName, signOut } = useAuth();
 
   const navLinks = [
     { href: "/", label: "Home" },
@@ -58,17 +62,47 @@ export function Navbar() {
 
         {/* Right side CTA & Auth */}
         <div className="hidden items-center gap-2.5 md:flex">
-          <Link href="/login">
-            <Button variant="ghost" size="sm">
-              Sign In
-            </Button>
-          </Link>
-          <Link href="/chat">
-            <Button variant="default" size="sm" className="gap-2 rounded-xl">
-              <Sparkles className="h-3.5 w-3.5" />
-              Try Companion
-            </Button>
-          </Link>
+          {user ? (
+            <>
+              <div className="flex items-center gap-2 px-2 py-1 text-xs text-zinc-700 dark:text-zinc-300">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                  <UserIcon className="h-3.5 w-3.5" />
+                </div>
+                <span className="font-medium max-w-[120px] truncate" title={displayName}>
+                  {displayName}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => signOut()}
+                className="text-xs gap-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>Sign Out</span>
+              </Button>
+              <Link href="/chat">
+                <Button variant="default" size="sm" className="gap-2 rounded-xl">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Companion
+                </Button>
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link href="/login">
+                <Button variant="ghost" size="sm">
+                  Sign In
+                </Button>
+              </Link>
+              <Link href="/signup">
+                <Button variant="default" size="sm" className="gap-2 rounded-xl">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Get Started
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile menu trigger */}
@@ -106,16 +140,40 @@ export function Navbar() {
               </Link>
             ))}
             <div className="pt-4 flex flex-col gap-2">
-              <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
-                <Button variant="outline" className="w-full justify-center">
-                  Sign In
-                </Button>
-              </Link>
-              <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
-                <Button variant="default" className="w-full justify-center">
-                  Create Account
-                </Button>
-              </Link>
+              {user ? (
+                <>
+                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 text-xs">
+                    <UserIcon className="h-4 w-4 text-zinc-500" />
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200 truncate">
+                      {displayName}
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      signOut();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full justify-center gap-2 text-xs"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Sign Out</span>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                    <Button variant="outline" className="w-full justify-center">
+                      Sign In
+                    </Button>
+                  </Link>
+                  <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
+                    <Button variant="default" className="w-full justify-center">
+                      Create Account
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

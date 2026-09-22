@@ -12,8 +12,10 @@ import {
   User,
   Moon,
   Clock,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { useAuth } from "@/context/AuthContext";
 
 interface SidebarProps {
   onNavigate?: () => void;
@@ -22,6 +24,7 @@ interface SidebarProps {
 
 export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
   const pathname = usePathname();
+  const { user, displayName, signOut } = useAuth();
 
   const mainNav = [
     { href: "/", label: "Home", icon: Home },
@@ -160,25 +163,37 @@ export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
       {/* 3. Sticky User Profile Footer (Non-scrolling) */}
       <div className="shrink-0 p-3 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30">
         <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 font-semibold text-xs border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700">
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 font-semibold text-xs border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700">
                 <User className="h-4 w-4" />
               </div>
-              <div>
-                <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[85px]">
-                  Researcher
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[95px]" title={user ? displayName : "Guest"}>
+                  {user ? displayName : "Guest"}
                 </div>
-                <div className="text-[10px] text-zinc-400">
-                  Free Account
+                <div className="text-[10px] text-zinc-400 truncate max-w-[95px]" title={user?.email || "Not signed in"}>
+                  {user ? (user.email ?? "Researcher") : "Not signed in"}
                 </div>
               </div>
             </div>
-            <Link href="/login" onClick={onNavigate}>
-              <Button variant="outline" size="sm" className="h-7 text-[11px] px-2.5 rounded-lg">
-                Sign In
+            {user ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => signOut()}
+                title="Sign Out"
+                className="h-7 w-7 p-0 shrink-0 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 rounded-lg"
+              >
+                <LogOut className="h-3.5 w-3.5" />
               </Button>
-            </Link>
+            ) : (
+              <Link href="/login" onClick={onNavigate} className="shrink-0">
+                <Button variant="outline" size="sm" className="h-7 text-[11px] px-2.5 rounded-lg">
+                  Sign In
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       </div>
