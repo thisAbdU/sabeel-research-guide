@@ -143,7 +143,7 @@ export async function POST(request: Request) {
         content: saved.content,
         createdAt: saved.created_at,
       },
-      sources: [],
+      sources: assistant.sources,
       researchDirections: assistant.researchDirections,
     },
   }

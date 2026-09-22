@@ -23,12 +23,18 @@ export type ChatReply = {
   createdAt: string
 }
 
+export type ResearchDirection = {
+  title: string
+  description: string
+  researchQuestion: string
+}
+
 export type ChatResponse = {
   data: {
     conversationId: string
     message: ChatReply
     sources: ResearchSource[]
-    researchDirections: string[]
+    researchDirections: ResearchDirection[]
   }
 }
 

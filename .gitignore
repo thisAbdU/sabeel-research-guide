@@ -7,3 +7,5 @@ dist/
 .env.*.local
 *.tsbuildinfo
 .DS_Store
+.cursor/
+PROMPT_TEMPLATES.md
