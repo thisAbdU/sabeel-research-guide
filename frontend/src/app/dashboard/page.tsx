@@ -24,42 +24,15 @@ export default function DashboardPage() {
 
   React.useEffect(() => {
     if (!authLoading && !user) {
-      router.push("/login");
+      router.replace("/login");
     }
   }, [authLoading, user, router]);
 
-  if (authLoading) {
+  if (authLoading || !user) {
     return (
       <AppShell>
         <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
-        </div>
-      </AppShell>
-    );
-  }
-
-  if (!user) {
-    return (
-      <AppShell>
-        <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center p-4">
-          <Card className="max-w-md p-6 text-center shadow-lg">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 mb-4">
-              <Lock className="h-6 w-6" />
-            </div>
-            <h2 className="text-lg font-bold text-zinc-950 dark:text-zinc-50">
-              Authentication Required
-            </h2>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              Sign in to access your researcher dashboard, drafts, and support settings.
-            </p>
-            <div className="mt-5 flex gap-2 justify-center">
-              <Link href="/login">
-                <Button size="sm" className="rounded-xl gap-1.5">
-                  <span>Sign In to Continue</span>
-                </Button>
-              </Link>
-            </div>
-          </Card>
         </div>
       </AppShell>
     );
