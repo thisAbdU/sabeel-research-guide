@@ -2,6 +2,7 @@ import { createSupabaseClient } from '@/lib/supabase/server'
 import { error, json, options, readBody } from '@/lib/http'
 import { toPublicUser, toSession } from '@/lib/mappers'
 import type { AuthResponse } from '@/lib/types'
+import { setAuthCookies } from '@/lib/auth-cookies'
 
 export function OPTIONS() {
   return options()
@@ -35,5 +36,13 @@ export async function POST(request: Request) {
     session: toSession(data.session),
   }
 
-  return json(response)
+  const responseObject = json(response)
+
+  setAuthCookies(
+    responseObject,
+    data.session.access_token,
+    data.session.refresh_token
+  )
+
+  return responseObject
 }

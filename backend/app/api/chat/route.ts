@@ -12,7 +12,9 @@ export function OPTIONS() {
 }
 
 export async function GET(request: Request) {
+  console.log("the request ->", request)
   const auth = await requireUser(request)
+  console.log("auth", auth)
   if (!auth.ok) return auth.response
 
   const conversationId = new URL(request.url).searchParams.get('conversationId')

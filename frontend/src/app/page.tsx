@@ -209,7 +209,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <span className="font-semibold text-zinc-800 dark:text-zinc-200">ScholarXiv Companion</span>
             <span>—</span>
-            <span>EthioDeploy & ScholarXiv Ecosystem</span>
+            <span>No rights Reserved!</span>
           </div>
           <div className="flex items-center gap-4">
             <Link href="/chat" className="hover:underline">Chatbot</Link>

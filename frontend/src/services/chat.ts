@@ -1,10 +1,15 @@
-import { getAccessToken } from "@/lib/supabase/token";
-import type { ChatMode, ChatRequestPayload, ChatResponseData } from "@/types/chat";
+import type {
+  ChatRequestPayload,
+  ChatResponseData,
+} from "@/types/chat";
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001").replace(/\/$/, "");
+const API_BASE_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+).replace(/\/$/, "");
 
 export class ChatApiError extends Error {
   status: number;
+
   constructor(message: string, status: number = 500) {
     super(message);
     this.name = "ChatApiError";
@@ -12,38 +17,31 @@ export class ChatApiError extends Error {
   }
 }
 
-/**
- * Sends a message to the ScholarXiv Research Companion backend API.
- * Attaches the current user's Supabase JWT access token via Authorization: Bearer.
- */
-export async function sendChatMessage(payload: ChatRequestPayload): Promise<ChatResponseData> {
-  const token = await getAccessToken();
-
-  if (!token) {
-    throw new ChatApiError(
-      "Your session could not be authenticated. Please sign in to send messages.",
-      401
-    );
-  }
-
+export async function sendChatMessage(
+  payload: ChatRequestPayload
+): Promise<ChatResponseData> {
   const endpoint = `${API_BASE_URL}/api/chat`;
 
   let response: Response;
+
   try {
     response = await fetch(endpoint, {
       method: "POST",
+
+      // Send the backend authentication cookie
+      credentials: "include",
+
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
+
       body: JSON.stringify({
         mode: payload.mode,
         conversationId: payload.conversationId || null,
         message: payload.message.trim(),
       }),
     });
-  } catch (err) {
-    // Network or connection failure (backend server down or unreachable)
+  } catch {
     throw new ChatApiError(
       "Unable to reach the ScholarXiv backend service. Please check your internet connection or try again later.",
       503
@@ -52,15 +50,19 @@ export async function sendChatMessage(payload: ChatRequestPayload): Promise<Chat
 
   if (!response.ok) {
     let errorDescription = "";
+
     try {
       const errorJson = await response.json();
+
       if (typeof errorJson?.error === "string") {
         errorDescription = errorJson.error;
-      } else if (typeof errorJson?.error?.message === "string") {
+      } else if (
+        typeof errorJson?.error?.message === "string"
+      ) {
         errorDescription = errorJson.error.message;
       }
     } catch {
-      // response body was not JSON
+      // Response body was not JSON.
     }
 
     if (response.status === 401) {
@@ -77,7 +79,10 @@ export async function sendChatMessage(payload: ChatRequestPayload): Promise<Chat
       );
     }
 
-    if (response.status === 502 || response.status === 503) {
+    if (
+      response.status === 502 ||
+      response.status === 503
+    ) {
       throw new ChatApiError(
         "The AI companion service is currently unavailable. Please try again shortly.",
         response.status
@@ -85,20 +90,30 @@ export async function sendChatMessage(payload: ChatRequestPayload): Promise<Chat
     }
 
     throw new ChatApiError(
-      errorDescription || "Something went wrong while processing your research request. Please try again.",
+      errorDescription ||
+        "Something went wrong while processing your research request. Please try again.",
       response.status
     );
   }
 
-  let result: { data?: ChatResponseData };
+  let result: {
+    data?: ChatResponseData;
+  };
+
   try {
     result = await response.json();
   } catch {
-    throw new ChatApiError("Received an invalid response format from the research server.", 500);
+    throw new ChatApiError(
+      "Received an invalid response format from the research server.",
+      500
+    );
   }
 
   if (!result?.data || !result.data.message) {
-    throw new ChatApiError("The research companion returned an incomplete response. Please try again.", 500);
+    throw new ChatApiError(
+      "The research companion returned an incomplete response. Please try again.",
+      500
+    );
   }
 
   return result.data;

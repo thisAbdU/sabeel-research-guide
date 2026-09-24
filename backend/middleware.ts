@@ -9,10 +9,13 @@ export function middleware(request: NextRequest) {
   }
 
   const path = request.nextUrl.pathname
-  if (!path.startsWith('/api/') || PUBLIC_PATHS.has(path)) return NextResponse.next()
+  if (!path.startsWith('/api/') || PUBLIC_PATHS.has(path)) {
+    return NextResponse.next()
+  }
 
-  const auth = request.headers.get('authorization')
-  if (!auth?.toLowerCase().startsWith('bearer ')) {
+  const accessTokenCookie = request.cookies.get('scholarxiv_access_token')?.value
+
+  if (!accessTokenCookie) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

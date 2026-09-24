@@ -1,110 +1,243 @@
 "use client";
 
 import * as React from "react";
-import type { User, Session, AuthError } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api";
 
 export interface SignUpProfile {
   fullName?: string;
   institution?: string;
 }
 
-export interface AuthContextType {
-  user: User | null;
-  session: Session | null;
-  isLoading: boolean;
-  displayName: string;
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null; session: Session | null }>;
-  signUp: (email: string, password: string, profile?: SignUpProfile) => Promise<{ error: AuthError | null; session: Session | null; user: User | null }>;
-  signOut: () => Promise<{ error: AuthError | null }>;
+export interface AuthUser {
+  id: string;
+  email: string;
+  fullName?: string;
+  institution?: string;
+  displayName?: string;
 }
 
-const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
+export interface AuthSession {
+  user: AuthUser;
+}
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = React.useState<User | null>(null);
-  const [session, setSession] = React.useState<Session | null>(null);
-  const [isLoading, setIsLoading] = React.useState<boolean>(true);
+export interface AuthContextType {
+  user: AuthUser | null;
+  session: AuthSession | null;
+  isLoading: boolean;
+  displayName: string;
 
+  signIn: (
+    email: string,
+    password: string
+  ) => Promise<{
+    error: Error | null;
+    session: AuthSession | null;
+  }>;
+
+  signUp: (
+    email: string,
+    password: string,
+    profile?: SignUpProfile
+  ) => Promise<{
+    error: Error | null;
+    session: AuthSession | null;
+    user: AuthUser | null;
+  }>;
+
+  signOut: () => Promise<{
+    error: Error | null;
+  }>;
+}
+
+const AuthContext = React.createContext<AuthContextType | undefined>(
+  undefined
+);
+
+export function AuthProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [user, setUser] = React.useState<AuthUser | null>(null);
+  const [session, setSession] = React.useState<AuthSession | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  /*
+   * Check whether the user is already authenticated
+   * when the application starts.
+   */
   React.useEffect(() => {
     let isMounted = true;
 
-    // Retrieve initial session from Supabase client
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!isMounted) return;
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    }).catch((err) => {
-      console.error("Error retrieving initial Supabase session:", err);
-      if (isMounted) setIsLoading(false);
-    });
+    const loadUser = async () => {
+      try {
+        const data = await apiFetch<{
+          user: AuthUser;
+        }>("/api/auth/me");
 
-    // Listen to all authentication state changes (login, logout, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      if (!isMounted) return;
-      setSession(currentSession);
-      setUser(currentSession?.user ?? null);
-      setIsLoading(false);
-    });
+        if (!isMounted) return;
+
+        setUser(data.user);
+        setSession({
+          user: data.user,
+        });
+      } catch (error) {
+        if (!isMounted) return;
+
+        setUser(null);
+        setSession(null);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+loadUser();
 
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
     };
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    if (!error && data.session) {
-      setSession(data.session);
-      setUser(data.user);
+  /*
+   * Login
+   */
+  const signIn = async (
+    email: string,
+    password: string
+  ) => {
+    try {
+      const data = await apiFetch<{
+        user: AuthUser;
+      }>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+        }),
+      });
+
+      const nextUser = data.user;
+
+      const nextSession: AuthSession = {
+        user: nextUser,
+      };
+
+      setUser(nextUser);
+      setSession(nextSession);
+
+      return {
+        error: null,
+        session: nextSession,
+      };
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to sign in"),
+        session: null,
+      };
     }
-    return { error, session: data.session };
   };
 
-  const signUp = async (email: string, password: string, profile?: SignUpProfile) => {
-    const trimmedEmail = email.trim();
-    const fullName = profile?.fullName?.trim() || trimmedEmail.split("@")[0];
-    const institution = profile?.institution?.trim();
+  /*
+   * Signup
+   */
+  const signUp = async (
+    email: string,
+    password: string,
+    profile?: SignUpProfile
+  ) => {
+    try {
+      const trimmedEmail = email.trim();
 
-    const { data, error } = await supabase.auth.signUp({
-      email: trimmedEmail,
-      password,
-      options: {
-        data: {
-          display_name: fullName,
-          full_name: fullName,
-          institution: institution || undefined,
-        },
-      },
-    });
+      const fullName =
+        profile?.fullName?.trim() ||
+        trimmedEmail.split("@")[0];
 
-    if (!error && data.session) {
-      setSession(data.session);
-      setUser(data.user);
+      const institution =
+        profile?.institution?.trim() || undefined;
+
+      const data = await apiFetch<{
+        user: AuthUser;
+        session?: AuthSession | null;
+      }>("/api/auth/signup", {
+        method: "POST",
+        body: JSON.stringify({
+          email: trimmedEmail,
+          password,
+          fullName,
+          institution,
+        }),
+      });
+
+      const nextUser = data.user;
+
+      /*
+       * If your backend creates a session immediately,
+       * use it. Otherwise session stays null and the
+       * signup page can show the confirmation message.
+       */
+      const nextSession = data.session ?? null;
+
+      if (nextUser) {
+        setUser(nextUser);
+      }
+
+      if (nextSession) {
+        setSession(nextSession);
+      }
+
+      return {
+        error: null,
+        session: nextSession,
+        user: nextUser ?? null,
+      };
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to create account"),
+        session: null,
+        user: null,
+      };
     }
-
-    return { error, session: data.session, user: data.user };
   };
 
+  /*
+   * Logout
+   */
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (!error) {
-      setSession(null);
+    try {
+      await apiFetch("/api/auth/logout", {
+        method: "POST",
+      });
+
       setUser(null);
+      setSession(null);
+
+      return {
+        error: null,
+      };
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to sign out"),
+      };
     }
-    return { error };
   };
 
   const displayName = React.useMemo(() => {
     if (!user) return "";
+
     return (
-      user.user_metadata?.display_name ||
-      user.user_metadata?.full_name ||
+      user.displayName ||
+      user.fullName ||
       user.email?.split("@")[0] ||
       "Researcher"
     );
@@ -123,13 +256,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user, session, isLoading, displayName]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthContextType {
   const context = React.useContext(AuthContext);
+
   if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error(
+      "useAuth must be used within an AuthProvider"
+    );
   }
+
   return context;
 }
