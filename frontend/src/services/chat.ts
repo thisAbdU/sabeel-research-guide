@@ -3,9 +3,7 @@ import type {
   ChatResponseData,
 } from "@/types/chat";
 
-const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
-).replace(/\/$/, "");
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
 export class ChatApiError extends Error {
   status: number;

@@ -69,6 +69,8 @@ export default function SignupPage() {
           setErrorMessage("An account with this email address already exists. Please sign in instead.");
         } else if (error.message.toLowerCase().includes("weak password") || error.message.toLowerCase().includes("at least 6 characters")) {
           setErrorMessage("Password must be at least 6 characters long.");
+        } else if (error.message.toLowerCase().includes("confirmation email") || error.message.toLowerCase().includes("sending confirmation")) {
+          setErrorMessage("Supabase email delivery rate limit reached or SMTP unconfigured. Please sign in with an existing confirmed account or disable email confirmations in Supabase.");
         } else {
           setErrorMessage(error.message || "Failed to create account. Please check your information.");
         }

@@ -168,6 +168,7 @@ loadUser();
         body: JSON.stringify({
           email: trimmedEmail,
           password,
+          displayName: fullName,
           fullName,
           institution,
         }),
