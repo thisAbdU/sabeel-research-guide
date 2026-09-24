@@ -14,8 +14,10 @@ export function middleware(request: NextRequest) {
   }
 
   const accessTokenCookie = request.cookies.get('scholarxiv_access_token')?.value
+  const authHeader = request.headers.get('authorization')
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null
 
-  if (!accessTokenCookie) {
+  if (!accessTokenCookie && !bearerToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

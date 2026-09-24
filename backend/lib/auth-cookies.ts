@@ -13,8 +13,7 @@ function serializeCookie(
     "Path=/",
     `Max-Age=${maxAge}`,
     "HttpOnly",
-    "SameSite=Lax",
-    ...(isProduction ? ["Secure"] : []),
+    isProduction ? "SameSite=None; Secure" : "SameSite=Lax",
   ].join("; ")
 }
 

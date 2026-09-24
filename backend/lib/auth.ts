@@ -17,7 +17,12 @@ export async function requireUser(
       response: Response
     }
 > {
-  const { accessToken } = getAuthCookies(request)
+  const { accessToken: cookieToken } = getAuthCookies(request)
+  const authHeader = request.headers.get("authorization")
+  const bearerToken = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : null
+  const accessToken = cookieToken || bearerToken
 
   if (!accessToken) {
     return {

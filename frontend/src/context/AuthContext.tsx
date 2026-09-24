@@ -176,11 +176,6 @@ loadUser();
 
       const nextUser = data.user;
 
-      /*
-       * If your backend creates a session immediately,
-       * use it. Otherwise session stays null and the
-       * signup page can show the confirmation message.
-       */
       const nextSession = data.session ?? null;
 
       if (nextUser) {

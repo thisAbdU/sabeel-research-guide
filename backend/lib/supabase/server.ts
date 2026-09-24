@@ -15,3 +15,17 @@ export function createSupabaseClient(accessToken?: string): SupabaseClient {
       : undefined,
   })
 }
+
+export function createSupabaseAdminClient(): SupabaseClient | null {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!serviceRoleKey) return null
+  const { url } = supabaseEnv()
+
+  return createClient(url, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  })
+}

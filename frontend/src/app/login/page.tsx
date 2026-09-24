@@ -49,8 +49,6 @@ export default function LoginPage() {
         // Map common Supabase auth errors to friendly user messages
         if (error.message.toLowerCase().includes("invalid login credentials")) {
           setErrorMessage("Invalid email or password. Please verify your credentials and try again.");
-        } else if (error.message.toLowerCase().includes("email not confirmed")) {
-          setErrorMessage("Your email address has not been confirmed yet. Please check your inbox for the confirmation link.");
         } else {
           setErrorMessage(error.message || "Failed to sign in. Please try again.");
         }

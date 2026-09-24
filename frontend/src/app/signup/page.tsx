@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Sparkles, ArrowRight, Lock, Mail, User, Building, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { Sparkles, ArrowRight, Lock, Mail, User, Building, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -19,7 +19,6 @@ export default function SignupPage() {
   const [password, setPassword] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
-  const [confirmationNotice, setConfirmationNotice] = React.useState<string | null>(null);
 
   // If user is already authenticated, redirect to /chat
   React.useEffect(() => {
@@ -31,7 +30,6 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-    setConfirmationNotice(null);
 
     const trimmedName = name.trim();
     const trimmedEmail = email.trim();
@@ -59,7 +57,7 @@ export default function SignupPage() {
     setIsLoading(true);
 
     try {
-      const { error, session } = await signUp(trimmedEmail, password, {
+      const { error } = await signUp(trimmedEmail, password, {
         fullName: trimmedName,
         institution: institution.trim() || undefined,
       });
@@ -69,8 +67,6 @@ export default function SignupPage() {
           setErrorMessage("An account with this email address already exists. Please sign in instead.");
         } else if (error.message.toLowerCase().includes("weak password") || error.message.toLowerCase().includes("at least 6 characters")) {
           setErrorMessage("Password must be at least 6 characters long.");
-        } else if (error.message.toLowerCase().includes("confirmation email") || error.message.toLowerCase().includes("sending confirmation")) {
-          setErrorMessage("Supabase email delivery rate limit reached or SMTP unconfigured. Please sign in with an existing confirmed account or disable email confirmations in Supabase.");
         } else {
           setErrorMessage(error.message || "Failed to create account. Please check your information.");
         }
@@ -78,18 +74,8 @@ export default function SignupPage() {
         return;
       }
 
-      // If Supabase returned an active session immediately, redirect to /chat
-      if (session) {
-        router.push("/chat");
-        return;
-      }
-
-      // If email confirmation is required by Supabase project settings
-      setConfirmationNotice(
-        "Account created successfully. A confirmation link has been sent to your email. Please verify your address before signing in."
-      );
-      setIsLoading(false);
-    } catch (err) {
+      router.push("/chat");
+    } catch {
       setErrorMessage("An unexpected network error occurred. Please check your connection and try again.");
       setIsLoading(false);
     }
@@ -126,18 +112,6 @@ export default function SignupPage() {
             <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50/70 p-3 text-xs text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
               <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
               <div className="flex-1">{errorMessage}</div>
-            </div>
-          )}
-
-          {confirmationNotice && (
-            <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300">
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
-              <div className="flex-1">
-                {confirmationNotice}{" "}
-                <Link href="/login" className="font-semibold underline">
-                  Proceed to Sign In
-                </Link>
-              </div>
             </div>
           )}
 
