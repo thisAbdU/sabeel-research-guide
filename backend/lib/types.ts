@@ -8,6 +8,7 @@ export type ResearchSource = {
   summary?: string
   url: string
   source: string
+  year?: string
 }
 
 export type ChatRequest = {

@@ -14,26 +14,35 @@ type Completion = {
   sources: ResearchSource[]
 }
 
+function isGreetingOnly(text: string): boolean {
+  const trimmed = text.trim()
+  return (
+    trimmed.length < 4 ||
+    /^(hi|hello|hey|yo|greetings|howdy|good\s*(morning|afternoon|evening))[\s.!]*$/i.test(trimmed)
+  )
+}
+
 export async function completeChat(mode: ChatMode, history: ChatTurn[], message: string): Promise<Completion> {
   const { baseUrl, apiKey, model } = aiEnv()
 
   let sources: ResearchSource[] = []
   let enhancedSystemPrompt = systemPromptFor(mode)
 
-  // For vent mode, search ScholarXiv when enough context exists
-  if (mode === 'vent' && history.length >= 2) {
+  // Search ScholarXiv whenever user provides a substantive research thought, topic, or paper reference
+  if (!isGreetingOnly(message)) {
     const searchQuery = extractSearchQuery(message, history.map((h) => h.content))
-    sources = await searchScholarXiv({ query: searchQuery, limit: 5 })
+    const limit = mode === 'vent' ? 5 : 3
+    sources = await searchScholarXiv({ query: searchQuery, limit })
 
     if (sources.length > 0) {
       const sourceContext = sources
         .map(
-          (source) =>
-            `- ${source.title} by ${source.authors.join(', ')}\n  URL: ${source.url}\n  Summary: ${source.summary || 'No summary available'}`
+          (source, idx) =>
+            `${idx + 1}. Title: "${source.title}"\n   Authors: ${source.authors.join(', ')}\n   URL: ${source.url}\n   Summary: ${source.summary || 'No summary available'}`
         )
         .join('\n\n')
 
-      enhancedSystemPrompt += `\n\nRESEARCH SOURCES FROM SCHOLARXIV:\n${sourceContext}\n\nUse these sources to ground your research directions. Reference them when relevant. Include these sources in your response's "sources" array exactly as provided above.`
+      enhancedSystemPrompt += `\n\nRESEARCH SOURCES FROM SCHOLARXIV:\n${sourceContext}\n\nCRITICAL INSTRUCTIONS FOR CITATIONS & SOURCES:\n1. Ground your exploration and recommendations in these real ScholarXiv literature sources.\n2. Whenever you mention or recommend any paper in your markdown response content, ALWAYS format its title as a clickable markdown link using its exact URL: [Paper Title](URL).\n3. Include these exact sources in your JSON response's "sources" array.`
     }
   }
 
@@ -69,8 +78,7 @@ export async function completeChat(mode: ChatMode, history: ChatTurn[], message:
 
   const parsed = parseAssistant(raw)
 
-  // When ScholarXiv sources are provided, ensure they're included in the response
-  // The AI should reference them, but we guarantee they're present
+  // When ScholarXiv sources were retrieved, guarantee they are included in the response
   const finalSources = sources.length > 0 ? sources : parsed.sources
 
   return {
@@ -103,7 +111,7 @@ function parseAssistant(raw: string): Completion {
         : [],
       sources: Array.isArray(parsed.sources)
         ? parsed.sources
-            .filter((item): item is { id?: unknown; title?: unknown; authors?: unknown; url?: unknown; source?: unknown } =>
+            .filter((item): item is { id?: unknown; title?: unknown; authors?: unknown; url?: unknown; source?: unknown; year?: unknown } =>
               typeof item === 'object' && item !== null
             )
             .map((item) => ({
@@ -114,8 +122,9 @@ function parseAssistant(raw: string): Completion {
                 : [],
               url: typeof item.url === 'string' ? item.url : '',
               source: typeof item.source === 'string' ? item.source : 'ScholarXiv',
+              year: typeof item.year === 'string' ? item.year : undefined,
             }))
-            .filter((src) => src.title.trim().length > 0 && src.url.trim().length > 0)
+            .filter((src) => src.title.trim().length > 0)
         : [],
     }
   } catch {

@@ -1,12 +1,119 @@
 "use client";
 
 import * as React from "react";
-import { Sparkles, User, AlertCircle, Copy, Check } from "lucide-react";
+import { Sparkles, User, AlertCircle, Copy, Check, ExternalLink } from "lucide-react";
 import { ChatMessageItem } from "@/types/chat";
 import { SourceCard } from "./SourceCard";
 
 interface ChatMessageProps {
   message: ChatMessageItem;
+}
+
+function renderFormattedInline(text: string): React.ReactNode {
+  // Regex to match:
+  // 1. Markdown link: [label](url)
+  // 2. Bold text: **bold**
+  // 3. Bare URL: https://...
+  const pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
+
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+
+    if (match[1] && match[2]) {
+      // Markdown link: [label](url)
+      nodes.push(
+        <a
+          key={`md-link-${match.index}`}
+          href={match[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-blue-600 dark:text-blue-400 hover:underline decoration-blue-400/40 inline-flex items-center gap-0.5 break-words transition-colors"
+        >
+          <span>{match[1]}</span>
+          <ExternalLink className="inline h-3 w-3 shrink-0 ml-0.5 opacity-80" />
+        </a>
+      );
+    } else if (match[3]) {
+      // Bold text
+      nodes.push(
+        <strong key={`bold-${match.index}`} className="font-semibold text-zinc-900 dark:text-zinc-100">
+          {match[3]}
+        </strong>
+      );
+    } else if (match[4]) {
+      // Bare URL
+      nodes.push(
+        <a
+          key={`url-${match.index}`}
+          href={match[4]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-blue-600 dark:text-blue-400 hover:underline decoration-blue-400/40 inline-flex items-center gap-0.5 break-all transition-colors"
+        >
+          <span>{match[4]}</span>
+          <ExternalLink className="inline h-3 w-3 shrink-0 ml-0.5 opacity-80" />
+        </a>
+      );
+    }
+
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes.length > 0 ? nodes : text;
+}
+
+function FormattedContent({ content }: { content: string }) {
+  const paragraphs = content.split(/\n\n+/);
+
+  return (
+    <div className="space-y-3 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
+      {paragraphs.map((para, i) => {
+        const lines = para.split("\n");
+        const isList = lines.length > 1 && lines.every((line) => /^\s*([*\-•]|\d+\.)\s+/.test(line));
+
+        if (isList) {
+          return (
+            <ul key={i} className="space-y-1.5 my-2">
+              {lines.map((line, lineIdx) => {
+                const markerMatch = line.match(/^\s*([*\-•]|\d+\.)\s+/);
+                const marker = markerMatch ? markerMatch[1] : "•";
+                const cleanLine = line.replace(/^\s*([*\-•]|\d+\.)\s+/, "");
+                return (
+                  <li key={lineIdx} className="flex items-start gap-2">
+                    <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500 shrink-0 select-none mt-0.5">
+                      {marker}
+                    </span>
+                    <span className="flex-1">{renderFormattedInline(cleanLine)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        }
+
+        return (
+          <p key={i}>
+            {lines.map((line, lineIdx) => (
+              <React.Fragment key={lineIdx}>
+                {lineIdx > 0 && <br />}
+                {renderFormattedInline(line)}
+              </React.Fragment>
+            ))}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 export function ChatMessage({ message }: ChatMessageProps) {
@@ -81,14 +188,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
                 type="button"
                 onClick={handleCopy}
                 title="Copy response"
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 cursor-pointer"
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
               </button>
             </div>
           </div>
 
-          {/* Message Content: Paragraphs and Markdown-friendly rendering */}
+          {/* Message Content: Paragraphs with markdown link rendering */}
           {message.isError ? (
             <div className="flex items-start gap-2 text-xs">
               <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
@@ -97,11 +204,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
               </div>
             </div>
           ) : (
-            <div className="space-y-3 whitespace-pre-wrap">
-              {message.content.split("\n\n").map((para, i) => (
-                <p key={i}>{para}</p>
-              ))}
-            </div>
+            <FormattedContent content={message.content} />
           )}
 
           {/* Research Directions (if any) */}
@@ -115,7 +218,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                   if (typeof dir === "string") {
                     return (
                       <li key={idx} className="list-disc ml-4">
-                        {dir}
+                        {renderFormattedInline(dir)}
                       </li>
                     );
                   }
@@ -129,7 +232,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                       </div>
                       {dir.description && (
                         <div className="mt-0.5 text-zinc-600 dark:text-zinc-400">
-                          {dir.description}
+                          {renderFormattedInline(dir.description)}
                         </div>
                       )}
                       {dir.researchQuestion && (
@@ -149,6 +252,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
         {message.sources && message.sources.length > 0 && (
           <div className="space-y-2 pt-1">
             <div className="flex items-center gap-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+              <ExternalLink className="h-3.5 w-3.5 text-blue-500" />
               <span>ScholarXiv Literature Sources ({message.sources.length})</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
