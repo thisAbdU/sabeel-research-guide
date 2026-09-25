@@ -2,6 +2,7 @@ import { aiEnv } from '@/lib/env'
 import { systemPromptFor } from '@/lib/chat/prompts'
 import { searchScholarXiv } from '@/lib/scholarxiv'
 import { assessVentReadiness, findLastVentQuery } from '@/lib/ai/vent'
+import { prepareRoastContext, getRoastPromptEnrichment } from '@/lib/ai/roast'
 import type { ChatMode, MessageRole, ResearchDirection, ResearchSource } from '@/lib/types'
 
 export type ChatTurn = {
@@ -20,6 +21,7 @@ export async function completeChat(mode: ChatMode, history: ChatTurn[], message:
 
   let sources: ResearchSource[] = []
   let enhancedSystemPrompt = systemPromptFor(mode)
+  let allowDirections = true
 
   if (mode === 'vent') {
     const lastSearchedQuery = findLastVentQuery(history)
@@ -46,14 +48,22 @@ export async function completeChat(mode: ChatMode, history: ChatTurn[], message:
         enhancedSystemPrompt += `\n\nNOTE ON LITERATURE SEARCH:\nA literature search for "${decision.focusedDirection || decision.query}" was attempted on ScholarXiv, but no directly matching papers were retrieved (or the search service was temporarily unavailable).\n- Do NOT fabricate or invent papers, authors, or links.\n- State conversationally that you checked the literature but didn't find direct matches right now.\n- Suggest ways the researcher could broaden, reframe, or refine their research question.\n- Keep "sources": [].`
       }
     } else if (decision.state === 'broad') {
+      allowDirections = false
       const missing = decision.missingDimensions?.join(', ') || 'target population, specific outcome, or educational setting'
       enhancedSystemPrompt += `\n\nVENT STAGE: NARROWING & CLARIFICATION\nThe user's research idea is currently too broad for an effective literature search.\nMissing dimensions: ${missing}.\n- Do NOT claim you searched ScholarXiv or cite papers.\n- Acknowledge their topic and ask 1–3 targeted, thoughtful narrowing questions to help them define their core phenomenon, population, outcome/variable, or context.\n- Do NOT overwhelm them with a long questionnaire; keep it conversational.\n- Keep "sources": [] and "researchDirections": [].`
     } else if (decision.state === 'conversational') {
       enhancedSystemPrompt += `\n\nVENT STAGE: CONVERSATIONAL CONTINUATION\nThe user is continuing the conversation without changing their core research focus.\n- Respond conversationally to their message.\n- Do NOT perform a new literature search.\n- Maintain previous context and continue developing the research plan or addressing their specific question.\n- Keep "sources": [].`
     }
+  } else if (mode === 'roast') {
+    const roastContext = await prepareRoastContext(history, message)
+    sources = roastContext.sources
+    enhancedSystemPrompt += getRoastPromptEnrichment(roastContext)
+    if (roastContext.isEmptyTopic) {
+      allowDirections = false
+    }
   }
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  let response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -72,6 +82,38 @@ export async function completeChat(mode: ChatMode, history: ChatTurn[], message:
     signal: AbortSignal.timeout(45_000),
   })
 
+  // If AI provider failed with json_validate_failed (grammar mismatch), retry without forced grammar
+  if (!response.ok && response.status === 400) {
+    try {
+      const errClone = response.clone()
+      const errData = (await errClone.json()) as { error?: { code?: string } }
+      if (errData?.error?.code === 'json_validate_failed') {
+        response = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0.7,
+            messages: [
+              {
+                role: 'system',
+                content: `${enhancedSystemPrompt}\n\nIMPORTANT: You must format your response as a valid JSON object matching the requested schema.`,
+              },
+              ...history,
+              { role: 'user', content: message },
+            ],
+          }),
+          signal: AbortSignal.timeout(45_000),
+        })
+      }
+    } catch {
+      // Ignore clone parse errors and let the error handling below report original response
+    }
+  }
+
   if (!response.ok) {
     const detail = await response.text()
     throw new Error(detail || `AI provider returned ${response.status}`)
@@ -85,11 +127,19 @@ export async function completeChat(mode: ChatMode, history: ChatTurn[], message:
 
   const parsed = parseAssistant(raw)
 
-  // In vent mode, sources must strictly be real ScholarXiv sources (no LLM hallucinations when 0 found)
-  const finalSources = mode === 'vent' ? sources : (sources.length > 0 ? sources : parsed.sources)
+  // In vent and roast modes, sources must strictly be real ScholarXiv sources (no LLM hallucinations when 0 found)
+  const finalSources =
+    mode === 'vent' || mode === 'roast'
+      ? sources
+      : sources.length > 0
+        ? sources
+        : parsed.sources
+
+  const finalDirections = allowDirections ? parsed.researchDirections : []
 
   return {
     ...parsed,
+    researchDirections: finalDirections,
     sources: finalSources,
   }
 }
@@ -97,7 +147,8 @@ export async function completeChat(mode: ChatMode, history: ChatTurn[], message:
 function parseAssistant(raw: string): Completion {
   try {
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
-    const parsed = JSON.parse(cleaned) as {
+    const parsedRaw = JSON.parse(cleaned) as unknown
+    const parsed = (Array.isArray(parsedRaw) && parsedRaw.length > 0 ? parsedRaw[0] : parsedRaw) as {
       content?: unknown
       researchDirections?: unknown
       sources?: unknown

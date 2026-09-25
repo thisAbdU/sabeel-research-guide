@@ -322,8 +322,8 @@ describe('Vent Mode Decision & Integration Tests', () => {
     assert.ok(refinement.query?.includes('ChatGPT'))
   })
 
-  // TEST 10 — Mode isolation (Roast and Funding remain untouched by Vent ScholarXiv logic)
-  it('TEST 10: Mode isolation - Roast and Funding modes do not execute Vent ScholarXiv search logic', async () => {
+  // TEST 10 — Mode isolation (Funding remains untouched by ScholarXiv logic; Vent logic is isolated)
+  it('TEST 10: Mode isolation - Funding mode does not execute ScholarXiv search logic, and Vent logic is isolated', async () => {
     let scholarXivCalled = false
     globalThis.fetch = (async (url: string | URL | Request) => {
       const urlStr = url.toString()
@@ -337,7 +337,7 @@ describe('Vent Mode Decision & Integration Tests', () => {
             {
               message: {
                 content: JSON.stringify({
-                  content: '🔥 The Roast: Your topic is broader than the Pacific Ocean.',
+                  content: 'Mode response content',
                   researchDirections: [],
                   sources: [],
                 }),
@@ -349,10 +349,10 @@ describe('Vent Mode Decision & Integration Tests', () => {
       )
     }) as typeof fetch
 
-    await completeChat('roast', [], 'AI in education')
-    assert.equal(scholarXivCalled, false, 'Roast should not execute ScholarXiv search in Step 2')
-
     await completeChat('funding', [], 'AI in education')
-    assert.equal(scholarXivCalled, false, 'Funding should not execute ScholarXiv search in Step 2')
+    assert.equal(scholarXivCalled, false, 'Funding should not execute ScholarXiv search')
+
+    await completeChat('vent', [], 'AI in education')
+    assert.equal(scholarXivCalled, false, 'Vent mode should narrow broad topic before searching ScholarXiv')
   })
 })
