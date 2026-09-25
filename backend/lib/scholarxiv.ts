@@ -1,6 +1,7 @@
+import { scholarxivEnv } from '@/lib/env'
 import type { ResearchSource } from '@/lib/types'
 
-type ScholarXivPaper = {
+export type ScholarXivPaper = {
   id: string
   extractedID: string
   title: string
@@ -20,13 +21,13 @@ type ScholarXivPaper = {
   authorsRaw?: string
 }
 
-type ScholarXivSearchParams = {
+export type ScholarXivSearchParams = {
   query: string
   limit?: number
   page?: number
 }
 
-type ScholarXivResponse = {
+export type ScholarXivResponse = {
   data: ScholarXivPaper[]
   pagination: {
     page: number
@@ -36,120 +37,57 @@ type ScholarXivResponse = {
   }
 }
 
-/**
- * ScholarXiv integration for research paper search and retrieval.
- *
- * Base URL: https://www.scholarxiv.com (MUST include www to avoid 307 redirect which strips Authorization header)
- * Endpoint: POST /api/v1/papers/search
- * Authentication: Bearer token or x-api-key header
- */
-export async function searchScholarXiv(params: ScholarXivSearchParams): Promise<ResearchSource[]> {
-  const SCHOLARXIV_API_URL = 'https://www.scholarxiv.com'
-  const SCHOLARXIV_API_KEY = process.env.SCHOLARXIV_API_KEY
+const SCHOLARXIV_URL_REGEX =
+  /(?:https?:\/\/)?(?:www\.)?scholarxiv\.com\/(?:abs|pdf)\/([0-9]+\.[0-9]+(?:v[0-9]+)?)/i
 
-  if (!SCHOLARXIV_API_KEY) {
-    console.warn('ScholarXiv API key not configured, returning empty results')
-    return []
-  }
+const ARXIV_URL_REGEX =
+  /(?:https?:\/\/)?(?:www\.)?arxiv\.org\/(?:abs|pdf)\/([0-9]+\.[0-9]+(?:v[0-9]+)?)/i
 
-  const query = params.query.trim()
-  if (!query) return []
-
-  try {
-    const paperId = extractPaperId(query)
-    const filter = paperId ? { id: paperId } : { all: query }
-
-    const response = await fetch(`${SCHOLARXIV_API_URL}/api/v1/papers/search`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SCHOLARXIV_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        searchFilterString: filter,
-        limit: params.limit || 5,
-        sortBy: 'relevance',
-        sortOrder: 'descending',
-      }),
-      signal: AbortSignal.timeout(15_000),
-    })
-
-    if (response.status === 429) {
-      const retryAfter = response.headers.get('Retry-After')
-      console.warn(`ScholarXiv rate limited. Retry-After: ${retryAfter} seconds`)
-      return []
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
-      console.error(`ScholarXiv API error: ${response.status} - ${errorText}`)
-      return []
-    }
-
-    const data = (await response.json()) as ScholarXivResponse
-    return normalizeScholarXivResults(data.data || [])
-  } catch (error) {
-    console.error('ScholarXiv search failed:', error)
-    return []
-  }
-}
-
-/**
- * Retrieve a specific paper by ID or URL from ScholarXiv.
- */
-export async function getScholarXivPaper(paperIdOrUrl: string): Promise<ResearchSource | null> {
-  const SCHOLARXIV_API_KEY = process.env.SCHOLARXIV_API_KEY
-
-  if (!SCHOLARXIV_API_KEY) {
-    return null
-  }
-
-  const cleanId = extractPaperId(paperIdOrUrl) || paperIdOrUrl.trim()
-  if (!cleanId) return null
-
-  try {
-    const results = await searchScholarXiv({ query: cleanId, limit: 1 })
-    return results[0] || null
-  } catch (error) {
-    console.error('ScholarXiv paper retrieval failed:', error)
-    return null
-  }
-}
+const BARE_ID_REGEX = /\b([0-9]{4}\.[0-9]{4,5}(?:v[0-9]+)?)\b/
 
 /**
  * Extract canonical arXiv/ScholarXiv paper ID from a string, URL, or identifier.
+ * Supports:
+ * - ScholarXiv abs URL (https://www.scholarxiv.com/abs/2401.01234)
+ * - ScholarXiv pdf URL (https://www.scholarxiv.com/pdf/2401.01234)
+ * - arXiv abs URL (https://arxiv.org/abs/2401.01234)
+ * - arXiv pdf URL (https://arxiv.org/pdf/2401.01234)
+ * - Bare IDs (2401.01234)
+ * - Versioned IDs (2401.01234v1)
  */
 export function extractPaperId(input: string): string | null {
-  if (!input) return null
+  if (!input || typeof input !== 'string') return null
   const trimmed = input.trim()
 
-  // Matches ScholarXiv URLs: /abs/2401.01234 or /pdf/2401.01234
-  const sxvMatch = trimmed.match(/(?:scholarxiv\.com)\/(?:abs|pdf)\/([0-9]+\.[0-9]+(?:v[0-9]+)?)/i)
-  if (sxvMatch) return sxvMatch[1]
+  const sxvMatch = trimmed.match(SCHOLARXIV_URL_REGEX)
+  if (sxvMatch && sxvMatch[1]) return sxvMatch[1]
 
-  // Matches arXiv URLs: /abs/2401.01234 or /pdf/2401.01234
-  const arxivMatch = trimmed.match(/(?:arxiv\.org)\/(?:abs|pdf)\/([0-9]+\.[0-9]+(?:v[0-9]+)?)/i)
-  if (arxivMatch) return arxivMatch[1]
+  const arxivMatch = trimmed.match(ARXIV_URL_REGEX)
+  if (arxivMatch && arxivMatch[1]) return arxivMatch[1]
 
-  // Matches direct arXiv paper ID e.g. 2401.01234 or 2401.01234v1
-  const idMatch = trimmed.match(/\b([0-9]{4}\.[0-9]{4,5}(?:v[0-9]+)?)\b/)
-  if (idMatch) return idMatch[1]
+  const bareMatch = trimmed.match(BARE_ID_REGEX)
+  if (bareMatch && bareMatch[1]) return bareMatch[1]
 
   return null
 }
 
 /**
  * Normalize ScholarXiv results to the standard ResearchSource format.
+ * Preserves existing ResearchSource shape and avoids leaking raw internal API fields.
  */
 function normalizeScholarXivResults(papers: ScholarXivPaper[]): ResearchSource[] {
   return papers
-    .filter((paper) => paper && paper.title)
+    .filter(
+      (paper) =>
+        paper &&
+        typeof paper === 'object' &&
+        typeof paper.title === 'string' &&
+        paper.title.trim().length > 0
+    )
     .map((paper) => {
-      // Prioritize abstract link, then PDF link, then canonical web link
-      const url =
-        paper.absLink ||
-        paper.pdfLink ||
-        (paper.extractedID ? `https://www.scholarxiv.com/abs/${paper.extractedID}` : '')
+      const paperId = paper.extractedID || paper.id
+      const fallbackUrl = paperId ? `https://www.scholarxiv.com/abs/${paperId}` : ''
+      const url = paper.absLink || paper.pdfLink || fallbackUrl
 
       let year: string | undefined
       if (paper.published) {
@@ -161,20 +99,145 @@ function normalizeScholarXivResults(papers: ScholarXivPaper[]): ResearchSource[]
 
       return {
         id: paper.extractedID || paper.id || `sxv-${Math.random().toString(36).slice(2, 9)}`,
-        title: paper.title,
-        authors: Array.isArray(paper.authors) ? paper.authors : [],
-        summary: paper.summary || '',
-        url,
+        title: paper.title.trim(),
+        authors: Array.isArray(paper.authors)
+          ? paper.authors.filter((a): a is string => typeof a === 'string')
+          : [],
+        summary: typeof paper.summary === 'string' ? paper.summary : '',
+        url: url.trim(),
         source: 'ScholarXiv',
         year,
       }
     })
-    .filter((source) => source.url.trim().length > 0)
+    .filter((source) => source.url.length > 0)
 }
 
 /**
- * Extract search query from user message.
- * Cleans conversational fluff so that the multi-field search matches relevant literature.
+ * Search ScholarXiv for relevant academic papers.
+ * Performs a fielded POST search across titles, abstracts, authors, and categories.
+ */
+export async function searchScholarXiv(params: ScholarXivSearchParams): Promise<ResearchSource[]> {
+  const { baseUrl, apiKey } = scholarxivEnv()
+
+  if (!apiKey) {
+    console.warn('ScholarXiv API key not configured, returning empty results')
+    return []
+  }
+
+  const query = params.query?.trim()
+  if (!query) return []
+
+  const requestedLimit = typeof params.limit === 'number' && params.limit > 0 ? params.limit : 5
+  const page = typeof params.page === 'number' && params.page >= 0 ? params.page : 0
+
+  const requestBody = {
+    searchFilterString: {
+      all: query,
+    },
+    page,
+    limit: requestedLimit,
+    sortBy: 'relevance',
+    sortOrder: 'descending',
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/api/v1/papers/search`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(30_000),
+    })
+
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After')
+      console.warn(`ScholarXiv rate limited (429). Retry-After: ${retryAfter ?? 'unknown'}s`)
+      return []
+    }
+
+    if (!response.ok) {
+      console.error(`ScholarXiv API error: ${response.status}`)
+      return []
+    }
+
+    const json = (await response.json()) as Partial<ScholarXivResponse>
+    if (!json || typeof json !== 'object' || !Array.isArray(json.data)) {
+      return []
+    }
+
+    return normalizeScholarXivResults(json.data)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`ScholarXiv search failed: ${message}`)
+    return []
+  }
+}
+
+/**
+ * Retrieve a specific paper by exact ID or URL from ScholarXiv using POST searchFilterString.id.
+ */
+export async function getScholarXivPaper(paperIdOrUrl: string): Promise<ResearchSource | null> {
+  const { baseUrl, apiKey } = scholarxivEnv()
+
+  if (!apiKey) {
+    console.warn('ScholarXiv API key not configured, returning null')
+    return null
+  }
+
+  if (!paperIdOrUrl || typeof paperIdOrUrl !== 'string') {
+    return null
+  }
+
+  const paperId = extractPaperId(paperIdOrUrl) || paperIdOrUrl.trim()
+  if (!paperId) return null
+
+  const requestBody = {
+    searchFilterString: {
+      id: paperId,
+    },
+    limit: 1,
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/api/v1/papers/search`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(30_000),
+    })
+
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After')
+      console.warn(`ScholarXiv rate limited (429). Retry-After: ${retryAfter ?? 'unknown'}s`)
+      return null
+    }
+
+    if (!response.ok) {
+      console.error(`ScholarXiv paper retrieval error: ${response.status}`)
+      return null
+    }
+
+    const json = (await response.json()) as Partial<ScholarXivResponse>
+    if (!json || typeof json !== 'object' || !Array.isArray(json.data) || json.data.length === 0) {
+      return null
+    }
+
+    const normalized = normalizeScholarXivResults(json.data)
+    return normalized[0] ?? null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`ScholarXiv paper retrieval failed: ${message}`)
+    return null
+  }
+}
+
+/**
+ * Extract clean search terms from a user message.
  */
 export function extractSearchQuery(message: string, context?: string[]): string {
   const paperId = extractPaperId(message)
@@ -182,13 +245,11 @@ export function extractSearchQuery(message: string, context?: string[]): string 
 
   let cleaned = message.trim()
 
-  // Remove common conversational prefixes
   cleaned = cleaned.replace(
     /^(i want to (study|research|explore|look into|understand|investigate)|i'm interested in|i am interested in|can you (help me with|recommend papers for|find papers on|suggest papers about)|what does (the )?research say about|my research (idea|topic|area) is)\s+/i,
     ''
   )
 
-  // Remove trailing question marks or punctuation
   cleaned = cleaned.replace(/[?!.]+$/, '').trim()
 
   return cleaned.slice(0, 300) || message.trim().slice(0, 300)

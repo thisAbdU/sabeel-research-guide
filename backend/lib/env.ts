@@ -18,3 +18,11 @@ export function aiEnv() {
     model: process.env.AI_MODEL ?? 'gpt-4o-mini',
   }
 }
+
+export function scholarxivEnv() {
+  return {
+    baseUrl: (process.env.SCHOLARXIV_BASE_URL ?? 'https://www.scholarxiv.com').replace(/\/$/, ''),
+    apiKey: process.env.SCHOLARXIV_API_KEY ?? '',
+  }
+}
+

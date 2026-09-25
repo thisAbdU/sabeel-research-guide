@@ -16,7 +16,9 @@ export async function apiFetch<T = any>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    console.error(`[apiFetch] Error on ${path}:`, data || response.statusText);
+    if (!(path === "/api/auth/me" && response.status === 401)) {
+      console.error(`[apiFetch] Error on ${path}:`, data || response.statusText);
+    }
     throw new Error(
       data?.message ||
         data?.error ||
