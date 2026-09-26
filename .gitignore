@@ -9,3 +9,7 @@ dist/
 .DS_Store
 .cursor/
 PROMPT_TEMPLATES.md
+.vscode/
+.cursor/
+.idea/
+tools/__pycache__/

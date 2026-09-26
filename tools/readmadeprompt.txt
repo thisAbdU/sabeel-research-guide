@@ -1,0 +1,228 @@
+# 2026-09-26 15:00:40
+
+You are writing a daily product changelog from git history.
+
+Current version: v1.0
+Repo: sabeel-research-guide
+
+Produce exactly three artifacts, in this order, nothing else:
+
+1) Version Tag
+   - Semver tag for this release (bump from current version).
+   - One line, e.g. v1.1
+
+2) Update Title
+   - One short public-facing title for this day's changes.
+
+3) changelog.md
+   - Markdown body only (no extra wrapping).
+   - User-facing: what changed, why it matters.
+   - Group as Added / Changed / Fixed when it fits.
+   - Skip noise (lockfiles, formatting-only, generated files) unless it changes behavior.
+
+Commit messages since last changelog:
+```
+47abf40  feat: roast
+a0b4683 chore: update backend pnpm-lock.yaml   with tsx
+e195258  feat: assess vent readiness
+5f2471a fix: use www.scholarxiv.com and enable clickable paper links
+e44fb40  disabled confirm email
+c32672f  Configured Next.js API Proxy
+2cc332b fix: auth integration
+138e56d fix: Removed the Authentication Required card for smooth redirect
+03b73a5 fix: sync pnpm-lock.yaml with @supabase/supabase-js and add build   fallbacks
+f77bd5f connected AI and scholarXiv API
+7d558b4 feat: integrated auth
+db23c82 feat: add prompts. integrate scholarxiv
+39a1c42 feat: add reusable chat components
+fb6c2ce fix: sync package.json specifiers   with pnpm-lock.yaml for Vercel deployment
+31ad38a feat: basic frontend structure (home, chat, discover, dashboard, login, signup)
+cacbb86 feat: add chat api
+6656fd9 feat: set up supabase. add core backend points
+```
+
+Files changed (status + line counts). Use this instead of patches:
+```
+M	.gitignore
+M	README.md
+A	api-contracts.md
+A	backend/.env.example
+A	backend/README.md
+A	backend/api-contracts.md
+D	backend/app/api/.gitkeep
+A	backend/app/api/auth/login/route.ts
+A	backend/app/api/auth/logout/route.ts
+A	backend/app/api/auth/me/route.ts
+A	backend/app/api/auth/signup/route.ts
+A	backend/app/api/chat/route.ts
+A	backend/app/api/funding/route.ts
+A	backend/app/api/research/[id]/route.ts
+A	backend/app/api/research/route.ts
+A	backend/app/api/support/route.ts
+A	backend/app/api/voice/route.ts
+A	backend/app/layout.tsx
+A	backend/app/page.tsx
+A	backend/lib/ai/complete.ts
+A	backend/lib/ai/roast.ts
+A	backend/lib/ai/vent.ts
+A	backend/lib/auth-cookies.ts
+A	backend/lib/auth.ts
+A	backend/lib/chat/prompts.ts
+A	backend/lib/chat/validate.ts
+A	backend/lib/env.ts
+A	backend/lib/http.ts
+A	backend/lib/mappers.ts
+A	backend/lib/scholarxiv.ts
+D	backend/lib/supabase/.gitkeep
+A	backend/lib/supabase/server.ts
+A	backend/lib/types.ts
+A	backend/middleware.ts
+A	backend/next-env.d.ts
+A	backend/next.config.ts
+A	backend/package.json
+A	backend/test/live-verify-roast.ts
+A	backend/test/live-verify-vent.ts
+A	backend/test/manual-verify.ts
+A	backend/test/roast.test.ts
+A	backend/test/scholarxiv.test.ts
+A	backend/test/vent.test.ts
+A	backend/tsconfig.json
+A	frontend/.gitignore
+A	frontend/AGENTS.md
+A	frontend/CLAUDE.md
+A	frontend/README.md
+D	frontend/app/.gitkeep
+D	frontend/components/ui/.gitkeep
+A	frontend/eslint.config.mjs
+D	frontend/lib/.gitkeep
+A	frontend/next.config.ts
+A	frontend/package.json
+A	frontend/pnpm-workspace.yaml
+A	frontend/postcss.config.mjs
+D	frontend/public/.gitkeep
+A	frontend/public/file.svg
+A	frontend/public/globe.svg
+A	frontend/public/next.svg
+A	frontend/public/vercel.svg
+A	frontend/public/window.svg
+A	frontend/src/app/chat/page.tsx
+A	frontend/src/app/dashboard/page.tsx
+A	frontend/src/app/discover/page.tsx
+A	frontend/src/app/favicon.ico
+A	frontend/src/app/globals.css
+A	frontend/src/app/layout.tsx
+A	frontend/src/app/login/page.tsx
+A	frontend/src/app/page.tsx
+A	frontend/src/app/signup/page.tsx
+A	frontend/src/components/chat/ChatInput.tsx
+A	frontend/src/components/chat/ChatMessage.tsx
+A	frontend/src/components/chat/ModeSelector.tsx
+A	frontend/src/components/chat/SourceCard.tsx
+A	frontend/src/components/chat/TypingIndicator.tsx
+A	frontend/src/components/layout/AppShell.tsx
+A	frontend/src/components/layout/Navbar.tsx
+A	frontend/src/components/layout/Sidebar.tsx
+A	frontend/src/components/ui/Badge.tsx
+A	frontend/src/components/ui/Button.tsx
+A	frontend/src/components/ui/Card.tsx
+A	frontend/src/components/ui/Input.tsx
+A	frontend/src/context/AuthContext.tsx
+A	frontend/src/lib/api.ts
+A	frontend/src/services/chat.ts
+A	frontend/src/types/chat.ts
+A	frontend/tsconfig.json
+D	supabase/migrations/.gitkeep
+A	supabase/migrations/0001_init.sql
+
+.gitignore                                       |    2 +
+ README.md                                        |    4 +-
+ api-contracts.md                                 | 1721 ++++++++++++++++++++++
+ backend/.env.example                             |    8 +
+ backend/README.md                                |   60 +
+ backend/api-contracts.md                         | 1721 ++++++++++++++++++++++
+ backend/app/api/.gitkeep                         |    0
+ backend/app/api/auth/login/route.ts              |   48 +
+ backend/app/api/auth/logout/route.ts             |   14 +
+ backend/app/api/auth/me/route.ts                 |   20 +
+ backend/app/api/auth/signup/route.ts             |   53 +
+ backend/app/api/chat/route.ts                    |  154 ++
+ backend/app/api/funding/route.ts                 |   73 +
+ backend/app/api/research/[id]/route.ts           |   83 ++
+ backend/app/api/research/route.ts                |   53 +
+ backend/app/api/support/route.ts                 |  125 ++
+ backend/app/api/voice/route.ts                   |   14 +
+ backend/app/layout.tsx                           |    7 +
+ backend/app/page.tsx                             |    3 +
+ backend/lib/ai/complete.ts                       |  192 +++
+ backend/lib/ai/roast.ts                          |  207 +++
+ backend/lib/ai/vent.ts                           |  271 ++++
+ backend/lib/auth-cookies.ts                      |   70 +
+ backend/lib/auth.ts                              |   54 +
+ backend/lib/chat/prompts.ts                      |  253 ++++
+ backend/lib/chat/validate.ts                     |   34 +
+ backend/lib/env.ts                               |   28 +
+ backend/lib/http.ts                              |   21 +
+ backend/lib/mappers.ts                           |  169 +++
+ backend/lib/scholarxiv.ts                        |  256 ++++
+ backend/lib/supabase/.gitkeep                    |    0
+ backend/lib/supabase/server.ts                   |   31 +
+ backend/lib/types.ts                             |  125 ++
+ backend/middleware.ts                            |   29 +
+ backend/next-env.d.ts                            |    6 +
+ backend/next.config.ts                           |   21 +
+ backend/package.json                             |   25 +
+ backend/test/live-verify-roast.ts                |   93 ++
+ backend/test/live-verify-vent.ts                 |  118 ++
+ backend/test/manual-verify.ts                    |   51 +
+ backend/test/roast.test.ts                       |  471 ++++++
+ backend/test/scholarxiv.test.ts                  |  229 +++
+ backend/test/vent.test.ts                        |  358 +++++
+ backend/tsconfig.json                            |   21 +
+ frontend/.gitignore                              |   43 +
+ frontend/AGENTS.md                               |    9 +
+ frontend/CLAUDE.md                               |    1 +
+ frontend/README.md                               |   36 +
+ frontend/app/.gitkeep                            |    0
+ frontend/components/ui/.gitkeep                  |    0
+ frontend/eslint.config.mjs                       |   18 +
+ frontend/lib/.gitkeep                            |    0
+ frontend/next.config.ts                          |   21 +
+ frontend/package.json                            |   29 +
+ frontend/pnpm-workspace.yaml                     |    2 +
+ frontend/postcss.config.mjs                      |    7 +
+ frontend/public/.gitkeep                         |    0
+ frontend/public/file.svg                         |    1 +
+ frontend/public/globe.svg                        |    1 +
+ frontend/public/next.svg                         |    1 +
+ frontend/public/vercel.svg                       |    1 +
+ frontend/public/window.svg                       |    1 +
+ frontend/src/app/chat/page.tsx                   |  376 +++++
+ frontend/src/app/dashboard/page.tsx              |  255 ++++
+ frontend/src/app/discover/page.tsx               |  182 +++
+ frontend/src/app/favicon.ico                     |  Bin 0 -> 25931 bytes
+ frontend/src/app/globals.css                     |   71 +
+ frontend/src/app/layout.tsx                      |   38 +
+ frontend/src/app/login/page.tsx                  |  174 +++
+ frontend/src/app/page.tsx                        |  223 +++
+ frontend/src/app/signup/page.tsx                 |  224 +++
+ frontend/src/components/chat/ChatInput.tsx       |  134 ++
+ frontend/src/components/chat/ChatMessage.tsx     |  268 ++++
+ frontend/src/components/chat/ModeSelector.tsx    |   75 +
+ frontend/src/components/chat/SourceCard.tsx      |  100 ++
+ frontend/src/components/chat/TypingIndicator.tsx |   40 +
+ frontend/src/components/layout/AppShell.tsx      |   63 +
+ frontend/src/components/layout/Navbar.tsx        |  183 +++
+ frontend/src/components/layout/Sidebar.tsx       |  202 +++
+ frontend/src/components/ui/Badge.tsx             |   51 +
+ frontend/src/components/ui/Button.tsx            |   50 +
+ frontend/src/components/ui/Card.tsx              |   88 ++
+ frontend/src/components/ui/Input.tsx             |   21 +
+ frontend/src/context/AuthContext.tsx             |  272 ++++
+ frontend/src/lib/api.ts                          |   30 +
+ frontend/src/services/chat.ts                    |  118 ++
+ frontend/src/types/chat.ts                       |   57 +
+ frontend/tsconfig.json                           |   34 +
+ supabase/migrations/.gitkeep                     |    0
+ supabase/migrations/0001_init.sql                |  250 ++++
+ 90 files changed, 11045 insertions(+), 1 deletion(-)
+```
