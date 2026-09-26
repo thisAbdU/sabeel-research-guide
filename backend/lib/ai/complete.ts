@@ -3,6 +3,7 @@ import { systemPromptFor } from '@/lib/chat/prompts'
 import { searchScholarXiv } from '@/lib/scholarxiv'
 import { assessVentReadiness, findLastVentQuery } from '@/lib/ai/vent'
 import { prepareRoastContext, getRoastPromptEnrichment } from '@/lib/ai/roast'
+import { prepareFundingContext } from '@/lib/ai/funding'
 import type { ChatMode, MessageRole, ResearchDirection, ResearchSource } from '@/lib/types'
 
 export type ChatTurn = {
@@ -16,7 +17,12 @@ type Completion = {
   sources: ResearchSource[]
 }
 
-export async function completeChat(mode: ChatMode, history: ChatTurn[], message: string): Promise<Completion> {
+export async function completeChat(
+  mode: ChatMode,
+  history: ChatTurn[],
+  message: string,
+  onStatus?: (text: string) => void,
+): Promise<Completion> {
   const { baseUrl, apiKey, model } = aiEnv()
 
   let sources: ResearchSource[] = []
@@ -61,9 +67,38 @@ export async function completeChat(mode: ChatMode, history: ChatTurn[], message:
     if (roastContext.isEmptyTopic) {
       allowDirections = false
     }
+  } else if (mode === 'funding') {
+    allowDirections = false
+    try {
+      const funding = await prepareFundingContext(history, message)
+      sources = funding.sources
+      enhancedSystemPrompt += funding.prompt
+      onStatus?.(
+        sources.length ? `Found ${sources.length} potential funders` : 'No documented funders yet',
+      )
+      console.info('[funding] context ready', { sources: sources.length })
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : String(err)
+      console.error('[funding] Exa failed, continuing to Groq without sources:', messageText)
+      sources = []
+      enhancedSystemPrompt += `\n\nFUNDING SEARCH:\nA web search for funders failed.\n- Do NOT invent organizations, grants, deadlines, amounts, or links.\n- Say documented funding sources could not be retrieved right now.\n- Keep "sources": [].`
+    }
   }
 
-  let response = await fetch(`${baseUrl}/chat/completions`, {
+  if (mode === 'funding' && sources.length > 0) {
+    return {
+      content: `Here are ${sources.length} potential funding organizations related to this research. These are potential matches, not a guarantee of funding.`,
+      researchDirections: [],
+      sources,
+    }
+  }
+
+  if (mode === 'funding') onStatus?.('Writing the funding summary')
+  const groqStarted = Date.now()
+  console.info('[groq] chat/completions start', { mode, model })
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -81,6 +116,11 @@ export async function completeChat(mode: ChatMode, history: ChatTurn[], message:
     }),
     signal: AbortSignal.timeout(45_000),
   })
+  } catch (err) {
+    const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+    console.error('[groq] chat/completions threw', { mode, ms: Date.now() - groqStarted, detail })
+    throw err
+  }
 
   // If AI provider failed with json_validate_failed (grammar mismatch), retry without forced grammar
   if (!response.ok && response.status === 400) {
@@ -114,8 +154,11 @@ export async function completeChat(mode: ChatMode, history: ChatTurn[], message:
     }
   }
 
+  console.info('[groq] chat/completions response', { mode, status: response.status, ms: Date.now() - groqStarted })
+
   if (!response.ok) {
     const detail = await response.text()
+    console.error('[groq] chat/completions failed', { mode, status: response.status, detail: detail.slice(0, 500) })
     throw new Error(detail || `AI provider returned ${response.status}`)
   }
 
@@ -127,20 +170,12 @@ export async function completeChat(mode: ChatMode, history: ChatTurn[], message:
 
   const parsed = parseAssistant(raw)
 
-  // In vent and roast modes, sources must strictly be real ScholarXiv sources (no LLM hallucinations when 0 found)
-  const finalSources =
-    mode === 'vent' || mode === 'roast'
-      ? sources
-      : sources.length > 0
-        ? sources
-        : parsed.sources
-
   const finalDirections = allowDirections ? parsed.researchDirections : []
 
   return {
     ...parsed,
     researchDirections: finalDirections,
-    sources: finalSources,
+    sources,
   }
 }
 

@@ -32,6 +32,7 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = React.useState<string | null>(null);
   const [messages, setMessages] = React.useState<ChatMessageItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [activity, setActivity] = React.useState<string | null>(null);
   const [sessionSources, setSessionSources] = React.useState<ResearchSource[]>([]);
   const [errorBanner, setErrorBanner] = React.useState<string | null>(null);
 
@@ -132,14 +133,18 @@ export default function ChatPage() {
 
     // Optimistically show user message immediately
     setMessages((prev) => [...prev, userMsg]);
+    setActivity(null);
     setIsLoading(true);
 
     try {
-      const result = await sendChatMessage({
-        mode: currentMode,
-        conversationId,
-        message: trimmed,
-      });
+      const result = await sendChatMessage(
+        {
+          mode: currentMode,
+          conversationId,
+          message: trimmed,
+        },
+        (text) => setActivity(text)
+      );
 
       // Save returned conversation ID for subsequent turns
       if (result.conversationId) {
@@ -188,6 +193,7 @@ export default function ChatPage() {
       setMessages((prev) => [...prev, errorMsg]);
       setErrorBanner(errorMessage);
     } finally {
+      setActivity(null);
       setIsLoading(false);
     }
   };
@@ -307,7 +313,7 @@ export default function ChatPage() {
                   ))}
 
                   {/* Mode-Specific Typing / Loading Indicator */}
-                  {isLoading && <TypingIndicator mode={currentMode} />}
+                  {isLoading && <TypingIndicator mode={currentMode} notice={activity} />}
                 </>
               )}
               <div ref={messagesEndRef} />
@@ -330,13 +336,17 @@ export default function ChatPage() {
             <Card className="flex-1 flex flex-col min-h-0">
               <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
-                  <BookOpen className="h-4 w-4 text-zinc-500" />
+                  {currentMode === "funding" ? (
+                    <Coins className="h-4 w-4 text-zinc-500" />
+                  ) : (
+                    <BookOpen className="h-4 w-4 text-zinc-500" />
+                  )}
                   <span className="font-semibold text-xs text-zinc-800 dark:text-zinc-200">
-                    ScholarXiv Literature
+                    {currentMode === "funding" ? "Funding sources" : "ScholarXiv Literature"}
                   </span>
                 </div>
                 <span className="text-[10px] font-mono text-zinc-400">
-                  {sessionSources.length} Grounded
+                  {sessionSources.length} {currentMode === "funding" ? "found" : "grounded"}
                 </span>
               </div>
 
@@ -344,12 +354,19 @@ export default function ChatPage() {
                 {sessionSources.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-zinc-200 p-6 text-center dark:border-zinc-800 text-zinc-400">
                     <p>
-                      Papers retrieved from ScholarXiv during this conversation will automatically appear here with links and summaries.
+                      {currentMode === "funding"
+                        ? "Organizations found for this research will appear here with links."
+                        : "Papers retrieved from ScholarXiv during this conversation will automatically appear here with links and summaries."}
                     </p>
                   </div>
                 ) : (
                   sessionSources.map((source) => (
-                    <SourceCard key={source.id} source={source} compact />
+                    <SourceCard
+                      key={source.id}
+                      source={source}
+                      compact
+                      variant={currentMode === "funding" ? "funding" : "paper"}
+                    />
                   ))
                 )}
               </div>

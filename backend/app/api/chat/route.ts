@@ -7,6 +7,44 @@ import type { ChatMode, ChatResponse } from '@/lib/types'
 
 const CONTEXT_LIMIT = 20
 
+// ponytail: idle dev proxy drops the socket around 30s; spaces are valid JSON whitespace
+function streamJson(work: (status: (text: string) => void) => Promise<unknown>) {
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (text: string) => controller.enqueue(encoder.encode(text))
+      const status = (text: string) => send(`${JSON.stringify({ status: text })}\n`)
+      console.info('[chat] response stream opened')
+      const beat = setInterval(() => {
+        try {
+          send('\n')
+        } catch {
+          clearInterval(beat)
+        }
+      }, 3000)
+      try {
+        const payload = await work(status)
+        clearInterval(beat)
+        send(`${JSON.stringify(payload)}\n`)
+        controller.close()
+      } catch (err) {
+        clearInterval(beat)
+        const message = err instanceof Error ? err.message : 'AI provider failed'
+        console.error('[chat] stream failed', message)
+        send(`${JSON.stringify({ error: message.slice(0, 500) })}\n`)
+        controller.close()
+      }
+    },
+  })
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
+
 export function OPTIONS() {
   return options()
 }
@@ -54,8 +92,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  console.info('[chat] request received')
   const auth = await requireUser(request)
-  if (!auth.ok) return auth.response
+  if (!auth.ok) {
+    console.warn('[chat] auth rejected')
+    return auth.response
+  }
 
   const parsed = validateChatRequest(await readBody(request))
   if (!parsed.ok) return error(parsed.error)
@@ -90,65 +132,75 @@ export async function POST(request: Request) {
     history = (prior ?? []).reverse() as ChatTurn[]
   }
 
-  let assistant
-  try {
-    assistant = await completeChat(mode, history, parsed.message)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'AI provider failed'
-    const missingKey = message.includes('AI_API_KEY')
-    return error(missingKey ? 'AI is not configured' : 'AI provider failed', missingKey ? 503 : 502)
-  }
+  request.signal.addEventListener('abort', () => {
+    console.warn('[chat] client aborted the request')
+  })
 
-  if (!conversationId) {
-    const { data: created, error: createError } = await auth.supabase
-      .from('conversations')
-      .insert({
-        user_id: auth.user.id,
-        mode,
-        title: parsed.message.slice(0, 80),
-      })
-      .select('id')
-      .single()
+  return streamJson(async (status) => {
+    let assistant
+    const started = Date.now()
+    console.info('[chat] completeChat start', { mode })
+    try {
+      assistant = await completeChat(mode, history, parsed.message, status)
+      console.info('[chat] completeChat done', { mode, ms: Date.now() - started, sources: assistant.sources.length })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'AI provider failed'
+      console.error('[chat] completeChat failed', { mode, ms: Date.now() - started, message })
+      const missingKey = message.includes('AI_API_KEY')
+      throw new Error(missingKey ? 'AI is not configured' : message.slice(0, 500))
+    }
 
-    if (createError || !created) return error(createError?.message ?? 'Could not create conversation', 500)
-    conversationId = created.id
-  }
+    if (!conversationId) {
+      const { data: created, error: createError } = await auth.supabase
+        .from('conversations')
+        .insert({
+          user_id: auth.user.id,
+          mode,
+          title: parsed.message.slice(0, 80),
+        })
+        .select('id')
+        .single()
 
-  if (!conversationId) return error('Could not create conversation', 500)
+      if (createError || !created) throw new Error(createError?.message ?? 'Could not create conversation')
+      conversationId = created.id
+    }
 
-  if (parsed.conversationId) {
-    await auth.supabase
-      .from('conversations')
-      .update({ updated_at: new Date().toISOString() })
-      .eq('id', conversationId)
-  }
+    if (!conversationId) throw new Error('Could not create conversation')
 
-  const { data: rows, error: persistError } = await auth.supabase
-    .from('messages')
-    .insert([
-      { conversation_id: conversationId, role: 'user', content: parsed.message },
-      { conversation_id: conversationId, role: 'assistant', content: assistant.content },
-    ])
-    .select('id, role, content, created_at')
+    if (parsed.conversationId) {
+      await auth.supabase
+        .from('conversations')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', conversationId)
+    }
 
-  if (persistError || !rows) return error(persistError?.message ?? 'Could not save messages', 500)
+    const { data: rows, error: persistError } = await auth.supabase
+      .from('messages')
+      .insert([
+        { conversation_id: conversationId, role: 'user', content: parsed.message },
+        { conversation_id: conversationId, role: 'assistant', content: assistant.content },
+      ])
+      .select('id, role, content, created_at')
 
-  const saved = rows.find((row) => row.role === 'assistant')
-  if (!saved) return error('Could not save assistant message', 500)
+    if (persistError || !rows) throw new Error(persistError?.message ?? 'Could not save messages')
 
-  const response: ChatResponse = {
-    data: {
-      conversationId,
-      message: {
-        id: saved.id,
-        role: 'assistant',
-        content: saved.content,
-        createdAt: saved.created_at,
+    const saved = rows.find((row) => row.role === 'assistant')
+    if (!saved) throw new Error('Could not save assistant message')
+
+    const response: ChatResponse = {
+      data: {
+        conversationId,
+        message: {
+          id: saved.id,
+          role: 'assistant',
+          content: saved.content,
+          createdAt: saved.created_at,
+        },
+        sources: assistant.sources,
+        researchDirections: assistant.researchDirections,
       },
-      sources: assistant.sources,
-      researchDirections: assistant.researchDirections,
-    },
-  }
+    }
 
-  return json(response)
+    return response
+  })
 }

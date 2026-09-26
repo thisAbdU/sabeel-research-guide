@@ -1,15 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { ExternalLink, BookOpen } from "lucide-react";
+import { ExternalLink, BookOpen, Coins } from "lucide-react";
 import { ResearchSource } from "@/types/chat";
 
 interface SourceCardProps {
   source: ResearchSource;
   compact?: boolean;
+  variant?: "paper" | "funding";
 }
 
-export function SourceCard({ source, compact = false }: SourceCardProps) {
+export function SourceCard({ source, compact = false, variant = "paper" }: SourceCardProps) {
+  const funding = variant === "funding";
   const [expanded, setExpanded] = React.useState(false);
 
   return (
@@ -17,9 +19,13 @@ export function SourceCard({ source, compact = false }: SourceCardProps) {
       <div>
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-            <BookOpen className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+            {funding ? (
+              <Coins className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+            ) : (
+              <BookOpen className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+            )}
             <span className="font-mono text-[11px] font-medium text-zinc-700 dark:text-zinc-300">
-              {source.source}
+              {funding ? "Potential funder" : source.source}
             </span>
             {source.year && (
               <>
@@ -35,7 +41,7 @@ export function SourceCard({ source, compact = false }: SourceCardProps) {
               target="_blank"
               rel="noopener noreferrer"
               className="text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              title="Open paper"
+              title="Open link"
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
@@ -89,10 +95,10 @@ export function SourceCard({ source, compact = false }: SourceCardProps) {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors"
           >
-            <span>View Paper</span>
+            <span>{funding ? "View fund source" : "View Paper"}</span>
             <ExternalLink className="h-3 w-3" />
           </a>
-          <span className="text-[10px] text-zinc-400">PDF / Abstract</span>
+          {!funding && <span className="text-[10px] text-zinc-400">PDF / Abstract</span>}
         </div>
       )}
     </div>

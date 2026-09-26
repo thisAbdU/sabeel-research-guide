@@ -16,9 +16,11 @@ export class ChatApiError extends Error {
 }
 
 export async function sendChatMessage(
-  payload: ChatRequestPayload
+  payload: ChatRequestPayload,
+  onStatus?: (text: string) => void
 ): Promise<ChatResponseData> {
   const endpoint = `${API_BASE_URL}/api/chat`;
+  console.info("[chat] POST", endpoint, payload.mode);
 
   let response: Response;
 
@@ -39,9 +41,11 @@ export async function sendChatMessage(
         message: payload.message.trim(),
       }),
     });
-  } catch {
+  } catch (err) {
+    const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.error("[chat] fetch threw before any HTTP response", { endpoint, mode: payload.mode, detail, err });
     throw new ChatApiError(
-      "Unable to reach the ScholarXiv backend service. Please check your internet connection or try again later.",
+      `Unable to reach the backend at ${endpoint}. ${detail}. This fires before Exa or Groq return a status — the request never completed.`,
       503
     );
   }
@@ -77,12 +81,14 @@ export async function sendChatMessage(
       );
     }
 
+    console.error("[chat] HTTP error", response.status, errorDescription);
+
     if (
       response.status === 502 ||
       response.status === 503
     ) {
       throw new ChatApiError(
-        "The AI companion service is currently unavailable. Please try again shortly.",
+        errorDescription || "The AI companion service is currently unavailable. Please try again shortly.",
         response.status
       );
     }
@@ -96,15 +102,21 @@ export async function sendChatMessage(
 
   let result: {
     data?: ChatResponseData;
+    error?: string;
   };
 
   try {
-    result = await response.json();
-  } catch {
+    result = await readChatStream(response, onStatus);
+  } catch (err) {
+    if (err instanceof ChatApiError) throw err;
     throw new ChatApiError(
       "Received an invalid response format from the research server.",
       500
     );
+  }
+
+  if (typeof result?.error === "string" && result.error) {
+    throw new ChatApiError(result.error, response.status);
   }
 
   if (!result?.data || !result.data.message) {
@@ -115,4 +127,44 @@ export async function sendChatMessage(
   }
 
   return result.data;
+}
+
+async function readChatStream(
+  response: Response,
+  onStatus?: (text: string) => void
+): Promise<{ data?: ChatResponseData; error?: string }> {
+  if (!response.body) {
+    throw new ChatApiError("Received an invalid response format from the research server.", 500);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: { data?: ChatResponseData; error?: string } | null = null;
+
+  const take = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{")) return;
+    const message = JSON.parse(trimmed) as { status?: string; data?: ChatResponseData; error?: string };
+    if (typeof message.status === "string" && !message.data) {
+      onStatus?.(message.status);
+      return;
+    }
+    result = message;
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) take(line);
+    if (done) break;
+  }
+  if (buffer.trim()) take(buffer);
+
+  if (!result) {
+    throw new ChatApiError("Received an invalid response format from the research server.", 500);
+  }
+  return result;
 }

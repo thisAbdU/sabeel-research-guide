@@ -10,11 +10,7 @@ interface ChatMessageProps {
 }
 
 function renderFormattedInline(text: string): React.ReactNode {
-  // Regex to match:
-  // 1. Markdown link: [label](url)
-  // 2. Bold text: **bold**
-  // 3. Bare URL: https://...
-  const pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
+  const pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|~~([^~]+)~~|(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
 
   const nodes: React.ReactNode[] = [];
   let lastIndex = 0;
@@ -40,23 +36,24 @@ function renderFormattedInline(text: string): React.ReactNode {
         </a>
       );
     } else if (match[3]) {
-      // Bold text
       nodes.push(
         <strong key={`bold-${match.index}`} className="font-semibold text-zinc-900 dark:text-zinc-100">
           {match[3]}
         </strong>
       );
     } else if (match[4]) {
+      nodes.push(<React.Fragment key={`strike-${match.index}`}>{match[4]}</React.Fragment>);
+    } else if (match[5]) {
       // Bare URL
       nodes.push(
         <a
           key={`url-${match.index}`}
-          href={match[4]}
+          href={match[5]}
           target="_blank"
           rel="noopener noreferrer"
           className="font-medium text-blue-600 dark:text-blue-400 hover:underline decoration-blue-400/40 inline-flex items-center gap-0.5 break-all transition-colors"
         >
-          <span>{match[4]}</span>
+          <span>{match[5]}</span>
           <ExternalLink className="inline h-3 w-3 shrink-0 ml-0.5 opacity-80" />
         </a>
       );
@@ -72,14 +69,19 @@ function renderFormattedInline(text: string): React.ReactNode {
   return nodes.length > 0 ? nodes : text;
 }
 
+function headingText(line: string) {
+  const match = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/);
+  return match ? match[1] : null;
+}
+
 function FormattedContent({ content }: { content: string }) {
   const paragraphs = content.split(/\n\n+/);
 
   return (
     <div className="space-y-3 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
       {paragraphs.map((para, i) => {
-        const lines = para.split("\n");
-        const isList = lines.length > 1 && lines.every((line) => /^\s*([*\-•]|\d+\.)\s+/.test(line));
+        const lines = para.split("\n").filter((line) => line.trim().length > 0);
+        const isList = lines.length > 0 && lines.every((line) => /^\s*([*\-•]|\d+\.)\s+/.test(line));
 
         if (isList) {
           return (
@@ -102,14 +104,19 @@ function FormattedContent({ content }: { content: string }) {
         }
 
         return (
-          <p key={i}>
-            {lines.map((line, lineIdx) => (
-              <React.Fragment key={lineIdx}>
-                {lineIdx > 0 && <br />}
-                {renderFormattedInline(line)}
-              </React.Fragment>
-            ))}
-          </p>
+          <div key={i} className="space-y-1.5">
+            {lines.map((line, lineIdx) => {
+              const heading = headingText(line);
+              if (heading) {
+                return (
+                  <h3 key={lineIdx} className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {renderFormattedInline(heading)}
+                  </h3>
+                );
+              }
+              return <p key={lineIdx}>{renderFormattedInline(line)}</p>;
+            })}
+          </div>
         );
       })}
     </div>
@@ -208,7 +215,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           )}
 
           {/* Research Directions (if any) */}
-          {message.researchDirections && message.researchDirections.length > 0 && (
+          {message.mode !== "funding" && message.researchDirections && message.researchDirections.length > 0 && (
             <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2.5">
               <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
                 Suggested Research Directions:
@@ -253,11 +260,18 @@ export function ChatMessage({ message }: ChatMessageProps) {
           <div className="space-y-2 pt-1">
             <div className="flex items-center gap-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
               <ExternalLink className="h-3.5 w-3.5 text-blue-500" />
-              <span>ScholarXiv Literature Sources ({message.sources.length})</span>
+              <span>
+                {message.mode === "funding" ? "Funding sources" : "ScholarXiv Literature Sources"} ({message.sources.length})
+              </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {message.sources.map((source) => (
-                <SourceCard key={source.id} source={source} compact />
+                <SourceCard
+                  key={source.id}
+                  source={source}
+                  compact
+                  variant={message.mode === "funding" ? "funding" : "paper"}
+                />
               ))}
             </div>
           </div>
