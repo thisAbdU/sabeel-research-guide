@@ -1,7 +1,16 @@
 import { requireUser } from '@/lib/auth'
 import { error, json, options, readBody } from '@/lib/http'
 import { toDiscoverResearch, toResearchProject } from '@/lib/mappers'
-import { RESEARCH_COLUMNS, readSupportEnabled, researchColumns, viewerClient, type ResearchWrite } from '@/lib/research'
+import {
+  DISCOVER_COLUMNS,
+  RESEARCH_COLUMNS,
+  discoverSearchFilter,
+  exactFilter,
+  readSupportEnabled,
+  researchColumns,
+  viewerClient,
+  type ResearchWrite,
+} from '@/lib/research'
 
 export function OPTIONS() {
   return options()
@@ -11,11 +20,23 @@ export async function GET(request: Request) {
   const viewer = await viewerClient(request)
   if (!viewer.ok) return viewer.response
 
-  const { data, error: listError } = await viewer.supabase
+  const params = new URL(request.url).searchParams
+  const q = discoverSearchFilter(params.get('q') ?? '')
+  const field = exactFilter(params.get('field'))
+  const location = exactFilter(params.get('location'))
+
+  let query = viewer.supabase
     .from('research_projects')
-    .select(RESEARCH_COLUMNS)
+    .select(DISCOVER_COLUMNS)
     .eq('is_published', true)
+    .eq('support_settings.enabled', true)
     .order('published_at', { ascending: false })
+
+  if (field) query = query.ilike('field', field)
+  if (location) query = query.ilike('location', location)
+  if (q) query = query.or(q)
+
+  const { data, error: listError } = await query
 
   if (listError) return error(listError.message, 500)
 

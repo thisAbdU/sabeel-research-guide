@@ -6,6 +6,9 @@ import { createSupabaseClient } from '@/lib/supabase/server'
 export const RESEARCH_COLUMNS =
   'id, user_id, title, researcher_name, field, description, abstract, research_url, institution, location, keywords, is_published, published_at, created_at, updated_at, support_settings(enabled)'
 
+export const DISCOVER_COLUMNS =
+  'id, user_id, title, researcher_name, field, description, research_url, institution, location, support_settings!inner(enabled)'
+
 export type ResearchWrite = {
   title?: string
   researcherName?: string | null
@@ -80,9 +83,59 @@ export function missingPublishFields(row: {
   return missing
 }
 
+function embeddedRows(embedded: unknown) {
+  return (Array.isArray(embedded) ? embedded : embedded ? [embedded] : []).filter(
+    (row): row is Record<string, unknown> => !!row && typeof row === 'object',
+  )
+}
+
 export function readSupportEnabled(embedded: unknown) {
-  const rows = Array.isArray(embedded) ? embedded : embedded ? [embedded] : []
-  return rows.some((row) => !!row && typeof row === 'object' && (row as { enabled?: boolean }).enabled === true)
+  return embeddedRows(embedded).some((row) => row.enabled === true)
+}
+
+export function paymentConfigured(embedded: unknown) {
+  return embeddedRows(embedded).some((row) => {
+    const provider = typeof row.payment_provider === 'string' ? row.payment_provider.trim() : ''
+    const account = typeof row.payment_account_id === 'string' ? row.payment_account_id.trim() : ''
+    return provider.length > 0 && account.length > 0
+  })
+}
+
+export function visibleOnDiscover(isPublished: boolean, supportEnabled: boolean) {
+  return isPublished && supportEnabled
+}
+
+export function supportUpdate(input: {
+  enabled: boolean
+  paymentProvider: string | null
+  paymentAccountId: string | null
+  projectPublished: boolean
+}): { ok: true; enabled: boolean; paymentProvider: string | null; paymentAccountId: string | null } | { ok: false; error: string } {
+  const paymentProvider = input.paymentProvider?.trim() || null
+  const paymentAccountId = input.paymentAccountId?.trim() || null
+  const paid = !!paymentProvider && !!paymentAccountId
+
+  if (input.enabled && !paid) return { ok: false, error: 'support requires payment configuration' }
+  if (input.enabled !== input.projectPublished) {
+    return {
+      ok: false,
+      error: input.projectPublished ? 'unpublish before disabling support' : 'publish to enable support',
+    }
+  }
+
+  return { ok: true, enabled: input.enabled, paymentProvider, paymentAccountId }
+}
+
+export function discoverSearchFilter(q: string) {
+  const term = q.trim().replace(/[%_\\",().]/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!term) return null
+  const pattern = `"%${term}%"`
+  return ['title', 'researcher_name', 'description', 'field'].map((column) => `${column}.ilike.${pattern}`).join(',')
+}
+
+export function exactFilter(value: string | null) {
+  const term = value?.trim().replace(/[%_\\",]/g, '') ?? ''
+  return term || null
 }
 
 export async function viewerClient(

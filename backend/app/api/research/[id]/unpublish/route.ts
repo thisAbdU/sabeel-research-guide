@@ -10,6 +10,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!auth.ok) return auth.response
 
   const { id } = await params
+  // Private first. Disabling support while the row is still public is rejected.
   const { data, error: updateError } = await auth.supabase
     .from('research_projects')
     .update({ is_published: false, published_at: null })

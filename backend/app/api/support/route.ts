@@ -1,6 +1,7 @@
 import { requireUser } from '@/lib/auth'
 import { error, json, options, readBody } from '@/lib/http'
 import { toSupportSettings, toSupportTransaction } from '@/lib/mappers'
+import { supportUpdate } from '@/lib/research'
 
 export function OPTIONS() {
   return options()
@@ -59,9 +60,14 @@ export async function PUT(request: Request) {
 
   if (projectError) return error(projectError.message, 500)
   if (!project) return error('Research project not found', 404)
-  if (body.enabled && !project.is_published) {
-    return error('Publish the project to Discover before enabling support')
-  }
+
+  const decision = supportUpdate({
+    enabled: body.enabled,
+    paymentProvider: body.paymentProvider ?? null,
+    paymentAccountId: body.paymentAccountId ?? null,
+    projectPublished: project.is_published,
+  })
+  if (!decision.ok) return error(decision.error)
 
   const { data, error: upsertError } = await auth.supabase
     .from('support_settings')
@@ -69,9 +75,9 @@ export async function PUT(request: Request) {
       {
         user_id: auth.user.id,
         research_project_id: researchProjectId,
-        enabled: body.enabled,
-        payment_provider: body.paymentProvider?.trim() || null,
-        payment_account_id: body.paymentAccountId?.trim() || null,
+        enabled: decision.enabled,
+        payment_provider: decision.paymentProvider,
+        payment_account_id: decision.paymentAccountId,
       },
       { onConflict: 'research_project_id' },
     )

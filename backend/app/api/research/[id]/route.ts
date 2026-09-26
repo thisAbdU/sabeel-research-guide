@@ -1,7 +1,7 @@
 import { requireUser } from '@/lib/auth'
 import { error, json, options, readBody } from '@/lib/http'
 import { toResearchProject } from '@/lib/mappers'
-import { RESEARCH_COLUMNS, readSupportEnabled, researchColumns, viewerClient, type ResearchWrite } from '@/lib/research'
+import { RESEARCH_COLUMNS, readSupportEnabled, researchColumns, viewerClient, visibleOnDiscover, type ResearchWrite } from '@/lib/research'
 
 export function OPTIONS() {
   return options()
@@ -19,11 +19,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .maybeSingle()
 
   if (fetchError) return error(fetchError.message, 500)
-  if (!data || (!data.is_published && data.user_id !== viewer.userId)) {
+  const supportEnabled = data ? readSupportEnabled(data.support_settings) : false
+  if (!data || (data.user_id !== viewer.userId && !visibleOnDiscover(data.is_published, supportEnabled))) {
     return error('Research project not found', 404)
   }
 
-  return json({ data: toResearchProject(data, readSupportEnabled(data.support_settings)) })
+  return json({ data: toResearchProject(data, supportEnabled) })
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
