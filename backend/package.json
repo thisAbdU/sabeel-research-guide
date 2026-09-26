@@ -7,7 +7,7 @@
     "dev": "next dev --port 3001",
     "build": "next build",
     "start": "next start --port 3001",
-    "test": "npx tsx --test test/scholarxiv.test.ts test/vent.test.ts test/roast.test.ts"
+    "test": "npx tsx --test test/scholarxiv.test.ts test/vent.test.ts test/roast.test.ts test/research.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

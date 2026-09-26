@@ -1,53 +1,47 @@
 import { requireUser } from '@/lib/auth'
 import { error, json, options, readBody } from '@/lib/http'
-import { toResearchProject } from '@/lib/mappers'
+import { toDiscoverResearch, toResearchProject } from '@/lib/mappers'
+import { RESEARCH_COLUMNS, readSupportEnabled, researchColumns, viewerClient, type ResearchWrite } from '@/lib/research'
 
 export function OPTIONS() {
   return options()
 }
 
 export async function GET(request: Request) {
-  const auth = await requireUser(request)
-  if (!auth.ok) return auth.response
+  const viewer = await viewerClient(request)
+  if (!viewer.ok) return viewer.response
 
-  const published = new URL(request.url).searchParams.get('published')
-  let query = auth.supabase.from('research_projects').select('*')
+  const { data, error: listError } = await viewer.supabase
+    .from('research_projects')
+    .select(RESEARCH_COLUMNS)
+    .eq('is_published', true)
+    .order('published_at', { ascending: false })
 
-  if (published === 'true') {
-    query = query.eq('is_published', true)
-  } else {
-    query = query.eq('user_id', auth.user.id)
-  }
-
-  const { data, error: listError } = await query.order('updated_at', { ascending: false })
   if (listError) return error(listError.message, 500)
-  return json({ projects: (data ?? []).map(toResearchProject) })
+
+  return json({
+    data: {
+      research: (data ?? []).map((row) => toDiscoverResearch(row, readSupportEnabled(row.support_settings))),
+    },
+  })
 }
 
 export async function POST(request: Request) {
   const auth = await requireUser(request)
   if (!auth.ok) return auth.response
 
-  const body = await readBody<{
-    title?: string
-    summary?: string
-    content?: string
-  }>(request)
+  const body = await readBody<ResearchWrite>(request)
+  if (!body) return error('Invalid JSON body')
 
-  const title = body?.title?.trim()
-  if (!title) return error('title is required')
+  const parsed = researchColumns(body, { titleRequired: true })
+  if (!parsed.ok) return error(parsed.error)
 
   const { data, error: createError } = await auth.supabase
     .from('research_projects')
-    .insert({
-      user_id: auth.user.id,
-      title,
-      summary: body?.summary?.trim() || null,
-      content: body?.content?.trim() || null,
-    })
-    .select('*')
+    .insert({ user_id: auth.user.id, ...parsed.columns })
+    .select(RESEARCH_COLUMNS)
     .single()
 
-  if (createError || !data) return error(createError?.message ?? 'Could not create project', 500)
-  return json({ project: toResearchProject(data) }, 201)
+  if (createError || !data) return error(createError?.message ?? 'Could not create research', 500)
+  return json({ data: toResearchProject(data, readSupportEnabled(data.support_settings)) }, 201)
 }

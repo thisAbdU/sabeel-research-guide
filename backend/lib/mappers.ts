@@ -74,27 +74,66 @@ export function toMessage(row: {
   }
 }
 
-export function toResearchProject(row: {
+export function toResearchProject(
+  row: {
+    id: string
+    title: string
+    researcher_name: string | null
+    description: string | null
+    abstract: string | null
+    field: string | null
+    keywords: string[] | null
+    research_url: string | null
+    institution: string | null
+    location: string | null
+    is_published: boolean
+    created_at: string
+    updated_at: string
+  },
+  supportEnabled = false,
+): ResearchProject {
+  return {
+    id: row.id,
+    title: row.title,
+    researcherName: row.researcher_name,
+    description: row.description,
+    abstract: row.abstract,
+    field: row.field,
+    keywords: row.keywords ?? [],
+    researchUrl: row.research_url,
+    institution: row.institution,
+    location: row.location,
+    visibility: row.is_published ? 'public' : 'private',
+    supportEnabled,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+export function toDiscoverResearch(row: {
   id: string
   user_id: string
   title: string
-  summary: string | null
-  content: string | null
-  is_published: boolean
-  published_at: string | null
-  created_at: string
-  updated_at: string
-}): ResearchProject {
+  researcher_name: string | null
+  field: string | null
+  description: string | null
+  research_url: string | null
+  institution: string | null
+  location: string | null
+}, supportEnabled = false) {
   return {
     id: row.id,
-    userId: row.user_id,
     title: row.title,
-    summary: row.summary,
-    content: row.content,
-    isPublished: row.is_published,
-    publishedAt: row.published_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    researcher: {
+      id: row.user_id,
+      name: row.researcher_name?.trim() || 'Researcher',
+    },
+    field: row.field,
+    description: row.description,
+    researchUrl: row.research_url,
+    institution: row.institution,
+    location: row.location,
+    supportEnabled,
   }
 }
 

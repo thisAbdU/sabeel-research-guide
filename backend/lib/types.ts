@@ -77,14 +77,21 @@ export type Message = {
   createdAt: string
 }
 
+export type ResearchVisibility = 'private' | 'public'
+
 export type ResearchProject = {
   id: string
-  userId: string
   title: string
-  summary: string | null
-  content: string | null
-  isPublished: boolean
-  publishedAt: string | null
+  researcherName: string | null
+  description: string | null
+  abstract: string | null
+  field: string | null
+  keywords: string[]
+  researchUrl: string | null
+  institution: string | null
+  location: string | null
+  visibility: ResearchVisibility
+  supportEnabled: boolean
   createdAt: string
   updatedAt: string
 }

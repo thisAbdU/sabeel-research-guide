@@ -9,7 +9,10 @@ export function middleware(request: NextRequest) {
   }
 
   const path = request.nextUrl.pathname
-  if (!path.startsWith('/api/') || PUBLIC_PATHS.has(path)) {
+  const publicRead =
+    request.method === 'GET' &&
+    (path === '/api/research' || /^\/api\/research\/[^/]+$/.test(path))
+  if (!path.startsWith('/api/') || PUBLIC_PATHS.has(path) || publicRead) {
     return NextResponse.next()
   }
 
