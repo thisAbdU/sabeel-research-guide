@@ -16,7 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params
   const { data: project, error: fetchError } = await auth.supabase
     .from('research_projects')
-    .select('id, title, researcher_name, field, description, support_settings(enabled, payment_provider, payment_account_id)')
+    .select('id, title, researcher_name, field, description, support_settings(enabled, payment_provider, payment_account_id, payment_methods)')
     .eq('id', id)
     .eq('user_id', auth.user.id)
     .maybeSingle()

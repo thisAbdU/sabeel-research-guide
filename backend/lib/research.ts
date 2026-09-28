@@ -95,6 +95,7 @@ export function readSupportEnabled(embedded: unknown) {
 
 export function paymentConfigured(embedded: unknown) {
   return embeddedRows(embedded).some((row) => {
+    if (Array.isArray(row.payment_methods) && row.payment_methods.length > 0) return true
     const provider = typeof row.payment_provider === 'string' ? row.payment_provider.trim() : ''
     const account = typeof row.payment_account_id === 'string' ? row.payment_account_id.trim() : ''
     return provider.length > 0 && account.length > 0
@@ -109,11 +110,25 @@ export function supportUpdate(input: {
   enabled: boolean
   paymentProvider: string | null
   paymentAccountId: string | null
+  paymentAccountName?: string | null
+  paymentMethods?: unknown
   projectPublished: boolean
-}): { ok: true; enabled: boolean; paymentProvider: string | null; paymentAccountId: string | null } | { ok: false; error: string } {
+}):
+  | {
+      ok: true
+      enabled: boolean
+      paymentProvider: string | null
+      paymentAccountId: string | null
+      paymentAccountName: string | null
+      paymentMethods: unknown
+    }
+  | { ok: false; error: string } {
   const paymentProvider = input.paymentProvider?.trim() || null
   const paymentAccountId = input.paymentAccountId?.trim() || null
-  const paid = !!paymentProvider && !!paymentAccountId
+  const paymentAccountName = input.paymentAccountName?.trim() || null
+  const hasLegacy = !!paymentProvider && !!paymentAccountId
+  const hasMethods = Array.isArray(input.paymentMethods) && input.paymentMethods.length > 0
+  const paid = hasLegacy || hasMethods
 
   if (input.enabled && !paid) return { ok: false, error: 'support requires payment configuration' }
   if (input.enabled !== input.projectPublished) {
@@ -123,7 +138,14 @@ export function supportUpdate(input: {
     }
   }
 
-  return { ok: true, enabled: input.enabled, paymentProvider, paymentAccountId }
+  return {
+    ok: true,
+    enabled: input.enabled,
+    paymentProvider,
+    paymentAccountId,
+    paymentAccountName,
+    paymentMethods: hasMethods ? input.paymentMethods : [],
+  }
 }
 
 export function discoverSearchFilter(q: string) {

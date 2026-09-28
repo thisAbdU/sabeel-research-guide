@@ -39,7 +39,7 @@ export type ChatResponse = {
   }
 }
 
-export type SupportStatus = 'pending' | 'completed' | 'failed'
+export type SupportStatus = 'pending' | 'completed' | 'failed' | 'cancelled'
 
 export type PublicUser = {
   id: string
@@ -108,6 +108,12 @@ export type FundingMatch = {
   createdAt: string
 }
 
+export type SupportPaymentMethod = {
+  provider: string
+  accountId: string
+  accountName: string
+}
+
 export type SupportSettings = {
   id: string
   userId: string
@@ -115,6 +121,8 @@ export type SupportSettings = {
   enabled: boolean
   paymentProvider: string | null
   paymentAccountId: string | null
+  paymentAccountName: string | null
+  paymentMethods: SupportPaymentMethod[]
   createdAt: string
   updatedAt: string
 }
@@ -124,9 +132,20 @@ export type SupportTransaction = {
   supportSettingsId: string
   researchProjectId: string
   supporterUserId: string | null
+  supporterName: string | null
+  isAnonymous: boolean
   amount: number
   currency: string
   status: SupportStatus
+  paymentReference: string
   providerPaymentId: string | null
   createdAt: string
+  verifiedAt: string | null
+}
+
+export type TopSupporter = {
+  displayName: string
+  amount: number
+  currency: string
+  supportedAt: string
 }

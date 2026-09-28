@@ -26,3 +26,10 @@ export function scholarxivEnv() {
   }
 }
 
+export function linksEtEnv() {
+  return {
+    baseUrl: (process.env.LINKS_ET_BASE_URL ?? 'https://links.et').replace(/\/$/, ''),
+    apiKey: required('LINKS_ET_API_KEY'),
+  }
+}
+

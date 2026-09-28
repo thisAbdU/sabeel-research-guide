@@ -226,3 +226,102 @@ A	supabase/migrations/0001_init.sql
  supabase/migrations/0001_init.sql                |  250 ++++
  90 files changed, 11045 insertions(+), 1 deletion(-)
 ```
+
+
+################################################################################
+# 2026-09-27 11:02:49
+################################################################################
+
+You are writing a daily product changelog from git history.
+
+Current version: v1.1
+Repo: sabeel-research-guide
+
+Produce exactly three artifacts, in this order, nothing else:
+
+1) Version Tag
+   - Semver tag for this release (bump from current version).
+   - One line, e.g. v1.1
+
+2) Update Title
+   - One short public-facing title for this day's changes.
+
+3) changelog.md
+   - Markdown body only (no extra wrapping).
+   - User-facing: what changed, why it matters.
+   - Group as Added / Changed / Fixed when it fits.
+   - Skip noise (lockfiles, formatting-only, generated files) unless it changes behavior.
+
+Commit messages since last changelog:
+```
+2443553 feat: publish/unpublish. set up payment flow
+90ca511 feat: add publish/unpublish research
+f1366ce feat: add funding. integrate exa ai for the web search
+46217c2 feat: add change log tracker tool for stark hackathon submission. ## IGNORE THIS SPEICIFCI COMMIT WHEN TRACKING THE NEXT CHANGELOG
+```
+
+Files changed (status + line counts). Use this instead of patches:
+```
+M	.gitignore
+M	backend/.env.example
+M	backend/app/api/chat/route.ts
+A	backend/app/api/dashboard/research/route.ts
+A	backend/app/api/research/[id]/publish/route.ts
+M	backend/app/api/research/[id]/route.ts
+A	backend/app/api/research/[id]/unpublish/route.ts
+M	backend/app/api/research/route.ts
+M	backend/app/api/support/route.ts
+A	backend/app/api/support/setup/route.ts
+M	backend/lib/ai/complete.ts
+A	backend/lib/ai/funding.ts
+M	backend/lib/chat/prompts.ts
+M	backend/lib/mappers.ts
+A	backend/lib/research.ts
+M	backend/lib/types.ts
+M	backend/middleware.ts
+M	backend/next.config.ts
+M	backend/package.json
+A	backend/test/research.test.ts
+M	frontend/src/app/chat/page.tsx
+M	frontend/src/components/chat/ChatMessage.tsx
+M	frontend/src/components/chat/SourceCard.tsx
+M	frontend/src/components/chat/TypingIndicator.tsx
+M	frontend/src/services/chat.ts
+A	supabase/migrations/0002_research_publishing.sql
+A	supabase/migrations/0003_publish_support.sql
+A	tools/.changelog_state
+A	tools/generate_changelog.py
+A	tools/readmadeprompt.txt
+
+.gitignore                                       |   6 +-
+ backend/.env.example                             |   1 +
+ backend/app/api/chat/route.ts                    | 164 ++++++++++------
+ backend/app/api/dashboard/research/route.ts      |  32 ++++
+ backend/app/api/research/[id]/publish/route.ts   |  64 +++++++
+ backend/app/api/research/[id]/route.ts           |  50 ++---
+ backend/app/api/research/[id]/unpublish/route.ts |  41 ++++
+ backend/app/api/research/route.ts                |  71 ++++---
+ backend/app/api/support/route.ts                 |  18 +-
+ backend/app/api/support/setup/route.ts           |  64 +++++++
+ backend/lib/ai/complete.ts                       |  57 ++++--
+ backend/lib/ai/funding.ts                        | 135 ++++++++++++++
+ backend/lib/chat/prompts.ts                      |   4 +-
+ backend/lib/mappers.ts                           |  69 +++++--
+ backend/lib/research.ts                          | 157 ++++++++++++++++
+ backend/lib/types.ts                             |  17 +-
+ backend/middleware.ts                            |   5 +-
+ backend/next.config.ts                           |   4 +
+ backend/package.json                             |   3 +-
+ backend/test/research.test.ts                    | 102 ++++++++++
+ frontend/src/app/chat/page.tsx                   |  39 ++--
+ frontend/src/components/chat/ChatMessage.tsx     |  56 +++---
+ frontend/src/components/chat/SourceCard.tsx      |  20 +-
+ frontend/src/components/chat/TypingIndicator.tsx |  53 +++++-
+ frontend/src/services/chat.ts                    |  64 ++++++-
+ supabase/migrations/0002_research_publishing.sql |  42 +++++
+ supabase/migrations/0003_publish_support.sql     |  64 +++++++
+ tools/.changelog_state                           |   2 +
+ tools/generate_changelog.py                      | 100 ++++++++++
+ tools/readmadeprompt.txt                         | 228 +++++++++++++++++++++++
+ 30 files changed, 1523 insertions(+), 209 deletions(-)
+```

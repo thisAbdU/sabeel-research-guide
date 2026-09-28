@@ -855,106 +855,125 @@ Research remains available to its owner.
 
 # 22. POST /api/support/setup
 
-Creates/configures support settings for a researcher.
-
-**Exact implementation depends on Links.et API.**
-
-Do not finalize external request fields until Links.et documentation has been checked.
-
-Conceptual request:
+Creates/configures support settings for a researcher (Ethiopian bank/wallet payout details).
 
 ```json
 {
   "researchId": "research-123",
-  "paymentMethod": "links_et"
+  "paymentMethods": [
+    {
+      "provider": "telebirr",
+      "accountId": "0911223344",
+      "accountName": "Ada Lovelace"
+    },
+    {
+      "provider": "cbe",
+      "accountId": "1000123456789",
+      "accountName": "Ada Lovelace"
+    }
+  ]
 }
 ```
 
-Conceptual response:
+Legacy single-method body also works: `paymentMethod`, `paymentAccountId`, `paymentAccountName`.
 
-```json
-{
-  "data": {
-    "researchId": "research-123",
-    "configured": true,
-    "status": "ready"
-  }
-}
-```
+Providers match links.et: telebirr, cbe, cbebirr, mpesa, boa, dashen, awash, zemen, coopay, kaafi, amhara, abay, oromia, berhan, ahadu, siinqee, zamzam.
 
 ---
 
 # 23. POST /api/support
 
-Creates a support payment.
+Creates a pending support tip and returns checkout payout details for the researcher.
 
-The support system is intended for small voluntary contributions, similar to "Buy Me a Coffee."
-
-It is NOT formal research funding.
-
----
+links.et does **not** initiate transfers. The supporter pays the researcher manually
+(bank / telebirr / wallet), then submits a receipt for verification.
 
 ## Request
 
 ```json
 {
   "researchId": "research-123",
-  "amount": 100
+  "amount": 100,
+  "supporterName": "Jane",
+  "anonymous": false
 }
 ```
 
----
+Anonymous tips omit `supporterName` or set `"anonymous": true`.
 
 ## Backend checks
 
 ```text
-1. Research exists
-2. Research is public
-3. Support is enabled
-4. Researcher has completed payment setup
-5. Amount is valid
-6. Create payment through Links.et
+1. Research exists and is public
+2. Support is enabled
+3. Researcher has payment methods configured
+4. Amount is valid (ETB)
+5. Create pending support_transactions row with opaque paymentReference
 ```
 
----
-
-## Conceptual Response
+## Response
 
 ```json
 {
   "data": {
     "paymentId": "payment-123",
     "status": "pending",
-    "checkoutUrl": "https://example.com/checkout"
+    "amount": 100,
+    "currency": "etb",
+    "paymentReference": "SBL-A1B2C3D4E5F6",
+    "checkout": {
+      "paymentReference": "SBL-A1B2C3D4E5F6",
+      "methods": [
+        {
+          "provider": "telebirr",
+          "accountId": "0911223344",
+          "accountName": "Ada Lovelace"
+        }
+      ]
+    }
   }
 }
 ```
-
-**Exact Links.et fields must be verified before implementation.**
 
 ---
 
 # 24. Payment Verification
 
-Conceptual endpoint:
-
 ```text
-POST /api/support/webhook
+POST /api/support/verify
 ```
 
-The exact webhook mechanism depends on Links.et.
+Body (exactly one of `url`, `reference`, `imageBase64`):
 
-The backend should verify the payment before recording it as successful.
+```json
+{
+  "paymentId": "payment-123",
+  "url": "https://transactioninfo.ethiotelecom.et/receipt/ABCD1234EF"
+}
+```
 
-Possible statuses:
+The backend calls links.et (`/api/verify` or `/api/verify-image`), matches amount +
+recipient (or paymentReference in the transfer reason), stores only a hashed
+receipt fingerprint, and marks the tip `completed` or `failed`.
+
+Statuses returned to the support modal:
 
 ```ts
 type PaymentStatus =
   | "pending"
+  | "processing"
   | "successful"
   | "failed"
   | "cancelled";
 ```
+
+Also:
+
+- `GET /api/support/:paymentId` — poll status
+- `POST /api/support/:paymentId` with `{ "action": "cancel" }` — cancel pending
+- `GET /api/support?researchProjectId=…&view=supporters` — top supporters list
+
+Never store receipt URLs or screenshot bytes. Never mark success without links.et confirmation.
 
 ---
 

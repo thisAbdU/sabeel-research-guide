@@ -11,8 +11,17 @@ export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
   const publicRead =
     request.method === 'GET' &&
-    (path === '/api/research' || /^\/api\/research\/[^/]+$/.test(path))
-  if (!path.startsWith('/api/') || PUBLIC_PATHS.has(path) || publicRead) {
+    (path === '/api/research' ||
+      /^\/api\/research\/[^/]+$/.test(path) ||
+      (path === '/api/support' && request.nextUrl.searchParams.get('view') === 'supporters') ||
+      /^\/api\/support\/[^/]+$/.test(path))
+
+  const publicSupportWrite =
+    (request.method === 'POST' && path === '/api/support') ||
+    (request.method === 'POST' && path === '/api/support/verify') ||
+    (request.method === 'POST' && /^\/api\/support\/[^/]+$/.test(path))
+
+  if (!path.startsWith('/api/') || PUBLIC_PATHS.has(path) || publicRead || publicSupportWrite) {
     return NextResponse.next()
   }
 

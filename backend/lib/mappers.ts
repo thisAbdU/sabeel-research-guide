@@ -8,6 +8,7 @@ import type {
   Session,
   SupportSettings,
   SupportTransaction,
+  TopSupporter,
 } from '@/lib/types'
 
 type UserRow = { display_name: string | null }
@@ -168,9 +169,22 @@ export function toSupportSettings(row: {
   enabled: boolean
   payment_provider: string | null
   payment_account_id: string | null
+  payment_account_name?: string | null
+  payment_methods?: unknown
   created_at: string
   updated_at: string
 }): SupportSettings {
+  const paymentMethods = Array.isArray(row.payment_methods)
+    ? row.payment_methods
+        .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+        .map((item) => ({
+          provider: String(item.provider ?? ''),
+          accountId: String(item.accountId ?? item.account_id ?? ''),
+          accountName: String(item.accountName ?? item.account_name ?? ''),
+        }))
+        .filter((item) => item.provider && item.accountId)
+    : []
+
   return {
     id: row.id,
     userId: row.user_id,
@@ -178,6 +192,8 @@ export function toSupportSettings(row: {
     enabled: row.enabled,
     paymentProvider: row.payment_provider,
     paymentAccountId: row.payment_account_id,
+    paymentAccountName: row.payment_account_name ?? null,
+    paymentMethods,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -188,21 +204,46 @@ export function toSupportTransaction(row: {
   support_settings_id: string
   research_project_id: string
   supporter_user_id: string | null
+  supporter_name?: string | null
+  is_anonymous?: boolean | null
   amount: number | string
   currency: string
   status: SupportTransaction['status']
+  payment_reference?: string | null
   provider_payment_id: string | null
   created_at: string
+  verified_at?: string | null
 }): SupportTransaction {
   return {
     id: row.id,
     supportSettingsId: row.support_settings_id,
     researchProjectId: row.research_project_id,
     supporterUserId: row.supporter_user_id,
+    supporterName: row.is_anonymous ? null : row.supporter_name ?? null,
+    isAnonymous: !!row.is_anonymous,
     amount: Number(row.amount),
     currency: row.currency,
     status: row.status,
+    paymentReference: row.payment_reference ?? '',
     providerPaymentId: row.provider_payment_id,
     createdAt: row.created_at,
+    verifiedAt: row.verified_at ?? null,
+  }
+}
+
+export function toTopSupporter(row: {
+  supporter_name?: string | null
+  is_anonymous?: boolean | null
+  amount: number | string
+  currency: string
+  verified_at?: string | null
+  created_at: string
+}): TopSupporter {
+  const anonymous = !!row.is_anonymous || !row.supporter_name?.trim()
+  return {
+    displayName: anonymous ? 'Anonymous' : row.supporter_name!.trim(),
+    amount: Number(row.amount),
+    currency: row.currency,
+    supportedAt: row.verified_at ?? row.created_at,
   }
 }
