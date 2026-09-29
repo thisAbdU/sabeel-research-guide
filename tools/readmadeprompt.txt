@@ -325,3 +325,79 @@ A	tools/readmadeprompt.txt
  tools/readmadeprompt.txt                         | 228 +++++++++++++++++++++++
  30 files changed, 1523 insertions(+), 209 deletions(-)
 ```
+
+
+################################################################################
+# 2026-09-28 17:09:42
+################################################################################
+
+You are writing a daily product changelog from git history.
+
+Current version: v1.2
+Repo: sabeel-research-guide
+
+Produce exactly three artifacts, in this order, nothing else:
+
+1) Version Tag
+   - Semver tag for this release (bump from current version).
+   - One line, e.g. v1.1
+
+2) Update Title
+   - One short public-facing title for this day's changes.
+
+3) changelog.md
+   - Markdown body only (no extra wrapping).
+   - User-facing: what changed, why it matters.
+   - Group as Added / Changed / Fixed when it fits.
+   - Skip noise (lockfiles, formatting-only, generated files) unless it changes behavior.
+
+Commit messages since last changelog:
+```
+ff9cabc feat: integrate linksEt. add api for the support flow
+```
+
+Files changed (status + line counts). Use this instead of patches:
+```
+M	backend/.env.example
+M	backend/api-contracts.md
+M	backend/app/api/research/[id]/publish/route.ts
+A	backend/app/api/support/[paymentId]/route.ts
+M	backend/app/api/support/route.ts
+M	backend/app/api/support/setup/route.ts
+A	backend/app/api/support/verify/route.ts
+M	backend/lib/env.ts
+A	backend/lib/links-et.ts
+M	backend/lib/mappers.ts
+M	backend/lib/research.ts
+A	backend/lib/supabase/admin.ts
+A	backend/lib/support.ts
+M	backend/lib/types.ts
+M	backend/middleware.ts
+M	backend/package.json
+A	backend/test/support.test.ts
+A	supabase/migrations/0004_support_links_et.sql
+M	tools/.changelog_state
+M	tools/readmadeprompt.txt
+
+backend/.env.example                           |   3 +
+ backend/api-contracts.md                       | 107 ++++---
+ backend/app/api/research/[id]/publish/route.ts |   2 +-
+ backend/app/api/support/[paymentId]/route.ts   | 118 ++++++++
+ backend/app/api/support/route.ts               | 154 ++++++++--
+ backend/app/api/support/setup/route.ts         |  64 +++--
+ backend/app/api/support/verify/route.ts        | 312 ++++++++++++++++++++
+ backend/lib/env.ts                             |   7 +
+ backend/lib/links-et.ts                        | 215 ++++++++++++++
+ backend/lib/mappers.ts                         |  41 +++
+ backend/lib/research.ts                        |  28 +-
+ backend/lib/supabase/admin.ts                  |  10 +
+ backend/lib/support.ts                         | 379 +++++++++++++++++++++++++
+ backend/lib/types.ts                           |  21 +-
+ backend/middleware.ts                          |  13 +-
+ backend/package.json                           |   2 +-
+ backend/test/support.test.ts                   | 117 ++++++++
+ supabase/migrations/0004_support_links_et.sql  | 128 +++++++++
+ tools/.changelog_state                         |   4 +-
+ tools/readmadeprompt.txt                       |  99 +++++++
+ 20 files changed, 1732 insertions(+), 92 deletions(-)
+```
