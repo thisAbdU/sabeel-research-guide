@@ -23,6 +23,7 @@ import { Card } from "@/components/ui/Card";
 import { ChatMode, ChatMessageItem, ResearchSource } from "@/types/chat";
 import { useAuth } from "@/context/AuthContext";
 import { sendChatMessage, ChatApiError } from "@/services/chat";
+import { useVoicePipeline } from "@/hooks/useVoicePipeline";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -116,87 +117,97 @@ export default function ChatPage() {
     setErrorBanner(null);
   };
 
-  // Real backend chat submission
-  const handleSendMessage = async (content: string) => {
-    const trimmed = content.trim();
-    if (!trimmed || isLoading) return;
+  // Shared text + voice path: returns assistant text for Voxide TTS when voice-driven
+  const handleSendMessage = React.useCallback(
+    async (content: string): Promise<string | null> => {
+      const trimmed = content.trim();
+      if (!trimmed || isLoading) return null;
 
-    setErrorBanner(null);
+      setErrorBanner(null);
 
-    const userMsg: ChatMessageItem = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: trimmed,
-      createdAt: new Date(),
-      mode: currentMode,
-    };
-
-    // Optimistically show user message immediately
-    setMessages((prev) => [...prev, userMsg]);
-    setActivity(null);
-    setIsLoading(true);
-
-    try {
-      const result = await sendChatMessage(
-        {
-          mode: currentMode,
-          conversationId,
-          message: trimmed,
-        },
-        (text) => setActivity(text)
-      );
-
-      // Save returned conversation ID for subsequent turns
-      if (result.conversationId) {
-        setConversationId(result.conversationId);
-      }
-
-      // Add assistant response
-      const assistantMsg: ChatMessageItem = {
-        id: result.message.id || `asst-${Date.now()}`,
-        role: "assistant",
-        content: result.message.content,
-        createdAt: result.message.createdAt || new Date().toISOString(),
-        mode: currentMode,
-        sources: result.sources && result.sources.length > 0 ? result.sources : undefined,
-        researchDirections:
-          result.researchDirections && result.researchDirections.length > 0
-            ? result.researchDirections
-            : undefined,
-      };
-
-      setMessages((prev) => [...prev, assistantMsg]);
-
-      // Deduplicate and accumulate ScholarXiv sources in right drawer
-      if (result.sources && result.sources.length > 0) {
-        setSessionSources((prev) => {
-          const existingKeys = new Set(prev.map((s) => s.id || s.title));
-          const newSources = result.sources.filter((s) => !existingKeys.has(s.id || s.title));
-          return [...newSources, ...prev];
-        });
-      }
-    } catch (err) {
-      const errorMessage =
-        err instanceof ChatApiError
-          ? err.message
-          : "Something went wrong while processing your research request. Please try again.";
-
-      const errorMsg: ChatMessageItem = {
-        id: `err-${Date.now()}`,
-        role: "assistant",
-        content: errorMessage,
+      const userMsg: ChatMessageItem = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: trimmed,
         createdAt: new Date(),
         mode: currentMode,
-        isError: true,
       };
 
-      setMessages((prev) => [...prev, errorMsg]);
-      setErrorBanner(errorMessage);
-    } finally {
+      setMessages((prev) => [...prev, userMsg]);
       setActivity(null);
-      setIsLoading(false);
-    }
-  };
+      setIsLoading(true);
+
+      try {
+        const result = await sendChatMessage(
+          {
+            mode: currentMode,
+            conversationId,
+            message: trimmed,
+          },
+          (text) => setActivity(text)
+        );
+
+        if (result.conversationId) {
+          setConversationId(result.conversationId);
+        }
+
+        const assistantMsg: ChatMessageItem = {
+          id: result.message.id || `asst-${Date.now()}`,
+          role: "assistant",
+          content: result.message.content,
+          createdAt: result.message.createdAt || new Date().toISOString(),
+          mode: currentMode,
+          sources: result.sources && result.sources.length > 0 ? result.sources : undefined,
+          researchDirections:
+            result.researchDirections && result.researchDirections.length > 0
+              ? result.researchDirections
+              : undefined,
+        };
+
+        setMessages((prev) => [...prev, assistantMsg]);
+
+        if (result.sources && result.sources.length > 0) {
+          setSessionSources((prev) => {
+            const existingKeys = new Set(prev.map((s) => s.id || s.title));
+            const newSources = result.sources.filter((s) => !existingKeys.has(s.id || s.title));
+            return [...newSources, ...prev];
+          });
+        }
+
+        return result.message.content;
+      } catch (err) {
+        const errorMessage =
+          err instanceof ChatApiError
+            ? err.message
+            : "Something went wrong while processing your research request. Please try again.";
+
+        const errorMsg: ChatMessageItem = {
+          id: `err-${Date.now()}`,
+          role: "assistant",
+          content: errorMessage,
+          createdAt: new Date(),
+          mode: currentMode,
+          isError: true,
+        };
+
+        setMessages((prev) => [...prev, errorMsg]);
+        setErrorBanner(errorMessage);
+        return null;
+      } finally {
+        setActivity(null);
+        setIsLoading(false);
+      }
+    },
+    [conversationId, currentMode, isLoading]
+  );
+
+  const voice = useVoicePipeline({
+    mode: currentMode,
+    conversationId,
+    sendThroughChat: handleSendMessage,
+    userId: user?.id,
+    userEmail: user?.email,
+  });
 
   if (authLoading || !user) {
     return (
@@ -324,9 +335,17 @@ export default function ChatPage() {
               <ChatInput
                 currentMode={currentMode}
                 onModeChange={handleModeChange}
-                onSendMessage={handleSendMessage}
+                onSendMessage={(content) => {
+                  void handleSendMessage(content);
+                }}
                 disabled={isLoading}
                 isLoading={isLoading}
+                voiceAvailable={voice.available}
+                voicePhase={voice.phase}
+                voiceActive={voice.isSessionOpen}
+                onToggleVoice={() => {
+                  void voice.toggle();
+                }}
               />
             </div>
           </div>

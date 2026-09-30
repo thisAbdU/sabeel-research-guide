@@ -9,6 +9,7 @@ export async function POST(request: Request) {
   const auth = await requireUser(request)
   if (!auth.ok) return auth.response
 
-  // ponytail: route exists for Person A; wire STT/TTS when voice is in scope
-  return error('Voice is not implemented yet', 501)
+  // Voice STT/TTS is client-side via @voxide/react (see frontend useVoicePipeline).
+  // This route is unused by the supported hackathon integration path.
+  return error('Voice runs in the browser via Voxide SDK, not this endpoint', 501)
 }

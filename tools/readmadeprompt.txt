@@ -401,3 +401,51 @@ backend/.env.example                           |   3 +
  tools/readmadeprompt.txt                       |  99 +++++++
  20 files changed, 1732 insertions(+), 92 deletions(-)
 ```
+
+
+################################################################################
+# 2026-09-29 17:18:51
+################################################################################
+
+You are writing a daily product changelog from git history.
+
+Current version: v1.3
+Repo: sabeel-research-guide
+
+Produce exactly three artifacts, in this order, nothing else:
+
+1) Version Tag
+   - Semver tag for this release (bump from current version).
+   - One line, e.g. v1.1
+
+2) Update Title
+   - One short public-facing title for this day's changes.
+
+3) changelog.md
+   - Markdown body only (no extra wrapping).
+   - User-facing: what changed, why it matters.
+   - Group as Added / Changed / Fixed when it fits.
+   - Skip noise (lockfiles, formatting-only, generated files) unless it changes behavior.
+
+Commit messages since last changelog:
+```
+641fc30 feat: add chanelog to stark
+```
+
+Files changed (status + line counts). Use this instead of patches:
+```
+M	backend/app/api/voice/route.ts
+M	frontend/package.json
+M	frontend/src/app/chat/page.tsx
+M	frontend/src/components/chat/ChatInput.tsx
+M	tools/.changelog_state
+M	tools/readmadeprompt.txt
+
+backend/app/api/voice/route.ts             |   5 +-
+ frontend/package.json                      |   1 +
+ frontend/src/app/chat/page.tsx             | 169 ++++++++++++++++-------------
+ frontend/src/components/chat/ChatInput.tsx |  60 +++++++---
+ tools/.changelog_state                     |   4 +-
+ tools/readmadeprompt.txt                   |  76 +++++++++++++
+ 6 files changed, 222 insertions(+), 93 deletions(-)
+```
