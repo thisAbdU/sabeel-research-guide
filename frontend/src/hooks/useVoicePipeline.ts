@@ -63,7 +63,7 @@ export function useVoicePipeline(options: {
     if (!client) return;
 
     let cancelled = false;
-    client.init().catch((err) => {
+    client.init().catch((err: unknown) => {
       if (!cancelled) console.error("[voxide] init failed", err);
     });
 

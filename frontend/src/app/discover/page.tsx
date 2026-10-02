@@ -12,54 +12,87 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/Card";
+import { apiFetch } from "@/lib/api";
+
+interface DiscoverResearch {
+  id: string;
+  title: string;
+  researcher: {
+    id: string;
+    name: string;
+  };
+  field: string | null;
+  description: string | null;
+  researchUrl: string | null;
+  institution: string | null;
+  location: string | null;
+  supportEnabled: boolean;
+}
+
+interface DiscoverApiResponse {
+  data: {
+    research: DiscoverResearch[];
+  };
+}
 
 export default function DiscoverPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [debouncedQuery, setDebouncedQuery] = React.useState("");
   const [selectedField, setSelectedField] = React.useState("All");
+  const [items, setItems] = React.useState<DiscoverResearch[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [retryTrigger, setRetryTrigger] = React.useState(0);
 
   const fields = ["All", "AI & Tech", "Education", "Healthcare", "Agriculture", "Economics"];
 
-  const mockResearchItems = [
-    {
-      id: "res-1",
-      title: "AI Adoption Factors Among University Students in Addis Ababa",
-      author: "Hana Mohammed",
-      institution: "Addis Ababa University",
-      location: "Ethiopia",
-      field: "AI & Tech",
-      tags: ["AI", "Higher Ed", "LLMs"],
-      date: "Sep 2026",
-      abstract:
-        "An empirical analysis of conversational AI adoption rates and educational outcomes among undergraduate engineering students, highlighting key behavioral patterns and study habits.",
-      supportEnabled: true,
-    },
-    {
-      id: "res-2",
-      title: "Climate-Resilient Sorghum Cultivation via Low-Cost IoT Soil Sensors",
-      author: "Dawit Bekele",
-      institution: "Haramaya University",
-      location: "Ethiopia",
-      field: "Agriculture",
-      tags: ["Agriculture", "IoT", "Climate"],
-      date: "Aug 2026",
-      abstract:
-        "Evaluating the deployment of low-power wireless moisture and temperature sensors to optimize irrigation schedules in semi-arid Ethiopian agricultural zones.",
-      supportEnabled: true,
-    },
-    {
-      id: "res-3",
-      title: "Telemedicine Triage Accuracy for Maternal Health in Rural Clinics",
-      author: "Selamawit Tadesse",
-      institution: "Jimma University",
-      location: "Ethiopia",
-      field: "Healthcare",
-      tags: ["Health", "Maternal Care", "Telehealth"],
-      date: "Aug 2026",
-      abstract:
-        "Assessing mobile telehealth triage protocols across 14 rural health posts to evaluate diagnostic referral speed and clinical follow-up compliance.",
-      supportEnabled: true,
-    },
-  ];
+  // Debounce search query input by ~300ms
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Fetch published research from real backend with abort controller to avoid race conditions
+  React.useEffect(() => {
+    const controller = new AbortController();
+    let isCancelled = false;
+
+    setIsLoading(true);
+    setError(null);
+
+    const params = new URLSearchParams();
+    const trimmed = debouncedQuery.trim();
+    if (trimmed) {
+      params.set("q", trimmed);
+    }
+    if (selectedField !== "All") {
+      params.set("field", selectedField);
+    }
+
+    const qs = params.toString();
+    const endpoint = `/api/research${qs ? `?${qs}` : ""}`;
+
+    apiFetch<DiscoverApiResponse>(endpoint, { signal: controller.signal })
+      .then((res) => {
+        if (!isCancelled) {
+          setItems(res.data?.research ?? []);
+          setIsLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (isCancelled || controller.signal.aborted) return;
+        const msg = err instanceof Error ? err.message : "Something went wrong while loading research.";
+        setError(msg);
+        setIsLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+      controller.abort();
+    };
+  }, [debouncedQuery, selectedField, retryTrigger]);
 
   return (
     <AppShell>
@@ -113,64 +146,167 @@ export default function DiscoverPage() {
           </div>
         </div>
 
-        {/* Research Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-2">
-          {mockResearchItems.map((item) => (
-            <Card key={item.id} className="flex flex-col justify-between hover:border-zinc-300 transition-colors">
-              <CardHeader className="space-y-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-mono text-[11px] text-zinc-600 dark:text-zinc-400 font-medium">
-                    {item.field}
-                  </span>
-                  <span className="text-zinc-400">{item.date}</span>
+        {/* Loading Skeletons */}
+        {isLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-2">
+            {[1, 2, 3].map((n) => (
+              <div
+                key={n}
+                className="rounded-2xl border border-zinc-200/90 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60 animate-pulse space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                  <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
                 </div>
-
-                <div>
-                  <CardTitle className="text-base font-semibold leading-snug line-clamp-2">
-                    {item.title}
-                  </CardTitle>
-                  <div className="mt-1.5 text-xs text-zinc-600 dark:text-zinc-400">
-                    <span className="font-medium text-zinc-900 dark:text-zinc-200">{item.author}</span>
-                    <span className="mx-1.5 text-zinc-300">·</span>
-                    <span>{item.institution}</span>
-                  </div>
+                <div className="space-y-2">
+                  <div className="h-5 w-3/4 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                  <div className="h-3 w-1/2 bg-zinc-200 dark:bg-zinc-800 rounded" />
                 </div>
+                <div className="h-20 bg-zinc-100 dark:bg-zinc-800/50 rounded-xl" />
+                <div className="flex items-center justify-between pt-2">
+                  <div className="h-8 w-24 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
+                  <div className="h-8 w-20 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
-                  {item.tags.map((t) => (
-                    <span key={t} className="rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                      {t}
+        {/* Error State */}
+        {error && !isLoading && (
+          <div className="rounded-2xl border border-red-200/80 bg-red-50/50 p-8 text-center dark:border-red-900/40 dark:bg-red-950/20 my-6">
+            <p className="text-sm font-medium text-red-800 dark:text-red-300">
+              {error}
+            </p>
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+              Could not load research projects. Please check your connection or try again.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRetryTrigger((prev) => prev + 1)}
+              className="mt-4 rounded-lg text-xs"
+            >
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!isLoading && !error && items.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-zinc-200 p-12 text-center dark:border-zinc-800 my-6">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 mb-3">
+              <BookOpen className="h-6 w-6" />
+            </div>
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              {debouncedQuery.trim() || selectedField !== "All"
+                ? "No published research found matching your criteria"
+                : "No published research available yet"}
+            </h3>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
+              {debouncedQuery.trim() || selectedField !== "All"
+                ? "Try searching for different keywords or clear the field filter."
+                : "Research will appear here once authors choose to publish their work."}
+            </p>
+            {(debouncedQuery.trim() || selectedField !== "All") && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedField("All");
+                }}
+                className="mt-4 rounded-lg text-xs"
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Real Research Cards Grid */}
+        {!isLoading && !error && items.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-2">
+            {items.map((item) => (
+              <Card key={item.id} className="flex flex-col justify-between hover:border-zinc-300 transition-colors">
+                <CardHeader className="space-y-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-mono text-[11px] text-zinc-600 dark:text-zinc-400 font-medium">
+                      {item.field || "General Research"}
                     </span>
-                  ))}
-                  <span className="inline-flex items-center text-zinc-400">
-                    <MapPin className="h-3 w-3 mr-0.5" />
-                    {item.location}
-                  </span>
-                </div>
-              </CardHeader>
+                    {item.supportEnabled && (
+                      <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full">
+                        Support Active
+                      </span>
+                    )}
+                  </div>
 
-              <CardContent>
-                <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 text-xs leading-relaxed text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
-                  {item.abstract}
-                </div>
-              </CardContent>
+                  <div>
+                    <CardTitle className="text-base font-semibold leading-snug line-clamp-2">
+                      {item.title}
+                    </CardTitle>
+                    <div className="mt-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                      <span className="font-medium text-zinc-900 dark:text-zinc-200">
+                        {item.researcher?.name || "Researcher"}
+                      </span>
+                      {item.institution && (
+                        <>
+                          <span className="mx-1.5 text-zinc-300 dark:text-zinc-600">·</span>
+                          <span>{item.institution}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
 
-              <CardFooter className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-lg">
-                  <BookOpen className="h-3.5 w-3.5" />
-                  Read Research
-                </Button>
+                  {item.location && (
+                    <div className="flex items-center text-[11px] text-zinc-500">
+                      <span className="inline-flex items-center text-zinc-400">
+                        <MapPin className="h-3 w-3 mr-0.5" />
+                        {item.location}
+                      </span>
+                    </div>
+                  )}
+                </CardHeader>
 
-                <Button variant="default" size="sm" className="gap-1.5 text-xs rounded-lg">
-                  <Coffee className="h-3.5 w-3.5" />
-                  <span>Support</span>
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
+                <CardContent>
+                  <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 text-xs leading-relaxed text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400 line-clamp-4">
+                    {item.description || "No description provided."}
+                  </div>
+                </CardContent>
 
-        {/* Empty state placeholder notice */}
+                <CardFooter className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
+                  {item.researchUrl ? (
+                    <a
+                      href={item.researchUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block"
+                    >
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-lg">
+                        <BookOpen className="h-3.5 w-3.5" />
+                        Read Research
+                      </Button>
+                    </a>
+                  ) : (
+                    <Button variant="outline" size="sm" disabled className="gap-1.5 text-xs rounded-lg opacity-50 cursor-not-allowed">
+                      <BookOpen className="h-3.5 w-3.5" />
+                      Read Research
+                    </Button>
+                  )}
+
+                  {item.supportEnabled ? (
+                    <Button variant="default" size="sm" className="gap-1.5 text-xs rounded-lg">
+                      <Coffee className="h-3.5 w-3.5" />
+                      <span>Support</span>
+                    </Button>
+                  ) : null}
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Informational footer notice */}
         <div className="rounded-2xl border border-dashed border-zinc-200 p-8 text-center dark:border-zinc-800 mt-6">
           <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
             Discover only displays research that authors have explicitly chosen to publish. External ScholarXiv search results remain on ScholarXiv.
@@ -180,3 +316,4 @@ export default function DiscoverPage() {
     </AppShell>
   );
 }
+
