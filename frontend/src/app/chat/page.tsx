@@ -18,6 +18,7 @@ import { ChatMessage } from "@/components/chat/ChatMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { SourceCard } from "@/components/chat/SourceCard";
+import { SourceDetailsPanel } from "@/components/chat/SourceDetailsPanel";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChatMode, ChatMessageItem, ResearchSource } from "@/types/chat";
@@ -35,6 +36,7 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = React.useState(false);
   const [activity, setActivity] = React.useState<string | null>(null);
   const [sessionSources, setSessionSources] = React.useState<ResearchSource[]>([]);
+  const [selectedSource, setSelectedSource] = React.useState<ResearchSource | null>(null);
   const [errorBanner, setErrorBanner] = React.useState<string | null>(null);
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -106,6 +108,7 @@ export default function ChatPage() {
     setConversationId(null);
     setMessages([]);
     setSessionSources([]);
+    setSelectedSource(null);
     setErrorBanner(null);
   };
 
@@ -114,6 +117,7 @@ export default function ChatPage() {
     setConversationId(null);
     setMessages([]);
     setSessionSources([]);
+    setSelectedSource(null);
     setErrorBanner(null);
   };
 
@@ -320,7 +324,12 @@ export default function ChatPage() {
                 /* Active Message Stream */
                 <>
                   {messages.map((msg) => (
-                    <ChatMessage key={msg.id} message={msg} />
+                    <ChatMessage
+                      key={msg.id}
+                      message={msg}
+                      onSelectSource={setSelectedSource}
+                      selectedSourceId={selectedSource?.id}
+                    />
                   ))}
 
                   {/* Mode-Specific Typing / Loading Indicator */}
@@ -350,62 +359,85 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Right Panel: ScholarXiv Grounding & Literature References */}
-          <div className="hidden lg:flex lg:col-span-4 flex-col space-y-4 h-full min-h-0">
-            <Card className="flex-1 flex flex-col min-h-0">
-              <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-2">
-                  {currentMode === "funding" ? (
-                    <Coins className="h-4 w-4 text-zinc-500" />
-                  ) : (
+          {/* Right Panel: Funder Details Inspector for Funding mode, Literature Panel for Vent/Roast */}
+          {currentMode === "funding" ? (
+            <div className="hidden lg:flex lg:col-span-4 flex-col h-full min-h-0">
+              <SourceDetailsPanel
+                source={selectedSource}
+                mode={currentMode}
+                onClose={() => setSelectedSource(null)}
+              />
+            </div>
+          ) : (
+            <div className="hidden lg:flex lg:col-span-4 flex-col space-y-4 h-full min-h-0">
+              <Card className="flex-1 flex flex-col min-h-0">
+                <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2">
                     <BookOpen className="h-4 w-4 text-zinc-500" />
-                  )}
-                  <span className="font-semibold text-xs text-zinc-800 dark:text-zinc-200">
-                    {currentMode === "funding" ? "Funding sources" : "ScholarXiv Literature"}
+                    <span className="font-semibold text-xs text-zinc-800 dark:text-zinc-200">
+                      ScholarXiv Literature
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-400">
+                    {sessionSources.length} grounded
                   </span>
                 </div>
-                <span className="text-[10px] font-mono text-zinc-400">
-                  {sessionSources.length} {currentMode === "funding" ? "found" : "grounded"}
-                </span>
-              </div>
 
-              <div className="p-4 text-xs space-y-3 overflow-y-auto flex-1">
-                {sessionSources.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-zinc-200 p-6 text-center dark:border-zinc-800 text-zinc-400">
-                    <p>
-                      {currentMode === "funding"
-                        ? "Organizations found for this research will appear here with links."
-                        : "Papers retrieved from ScholarXiv during this conversation will automatically appear here with links and summaries."}
+                <div className="p-4 text-xs space-y-3 overflow-y-auto flex-1">
+                  {sessionSources.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-zinc-200 p-6 text-center dark:border-zinc-800 text-zinc-400">
+                      <p>
+                        Papers retrieved from ScholarXiv during this conversation will automatically appear here with links and summaries.
+                      </p>
+                    </div>
+                  ) : (
+                    sessionSources.map((source) => (
+                      <SourceCard
+                        key={source.id}
+                        source={source}
+                        compact
+                        variant="paper"
+                      />
+                    ))
+                  )}
+                </div>
+              </Card>
+
+              <Card className="p-4 bg-zinc-50/80 dark:bg-zinc-900/40 shrink-0">
+                <div className="flex items-start gap-2.5">
+                  <Info className="h-4 w-4 text-zinc-500 shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <div className="font-semibold text-zinc-900 dark:text-zinc-100">
+                      Publish & Support Pipeline
+                    </div>
+                    <p className="text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      After funding analysis, you can choose to make your research publicly discoverable and enable Buy Me a Coffee tips.
                     </p>
                   </div>
-                ) : (
-                  sessionSources.map((source) => (
-                    <SourceCard
-                      key={source.id}
-                      source={source}
-                      compact
-                      variant={currentMode === "funding" ? "funding" : "paper"}
-                    />
-                  ))
-                )}
-              </div>
-            </Card>
-
-            <Card className="p-4 bg-zinc-50/80 dark:bg-zinc-900/40 shrink-0">
-              <div className="flex items-start gap-2.5">
-                <Info className="h-4 w-4 text-zinc-500 shrink-0 mt-0.5" />
-                <div className="text-xs">
-                  <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                    Publish & Support Pipeline
-                  </div>
-                  <p className="text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    After funding analysis, you can choose to make your research publicly discoverable and enable Buy Me a Coffee tips.
-                  </p>
                 </div>
-              </div>
-            </Card>
-          </div>
+              </Card>
+            </div>
+          )}
         </div>
+
+        {/* Mobile Details Modal / Drawer (Funding mode only) */}
+        {currentMode === "funding" && selectedSource && (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-xs lg:hidden animate-fadeIn"
+            onClick={() => setSelectedSource(null)}
+          >
+            <div
+              className="w-full max-w-lg max-h-[85vh] h-auto flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SourceDetailsPanel
+                source={selectedSource}
+                mode={currentMode}
+                onClose={() => setSelectedSource(null)}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );

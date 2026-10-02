@@ -1,3 +1,4 @@
+import https from 'node:https'
 import { scholarxivEnv } from '@/lib/env'
 import type { ResearchSource } from '@/lib/types'
 
@@ -38,22 +39,23 @@ export type ScholarXivResponse = {
 }
 
 const SCHOLARXIV_URL_REGEX =
-  /(?:https?:\/\/)?(?:www\.)?scholarxiv\.com\/(?:abs|pdf)\/([0-9]+\.[0-9]+(?:v[0-9]+)?)/i
+  /(?:https?:\/\/)?(?:www\.)?scholarxiv\.com\/(?:abs|pdf|journal)\/((?:sx\.)?[0-9]+\.[0-9]+(?:v[0-9]+)?)/i
 
 const ARXIV_URL_REGEX =
   /(?:https?:\/\/)?(?:www\.)?arxiv\.org\/(?:abs|pdf)\/([0-9]+\.[0-9]+(?:v[0-9]+)?)/i
 
-const BARE_ID_REGEX = /\b([0-9]{4}\.[0-9]{4,5}(?:v[0-9]+)?)\b/
+const BARE_ID_REGEX = /\b((?:sx\.)?[0-9]{4}\.[0-9]{4,5}(?:v[0-9]+)?)\b/
 
 /**
  * Extract canonical arXiv/ScholarXiv paper ID from a string, URL, or identifier.
  * Supports:
+ * - ScholarXiv journal URL (https://www.scholarxiv.com/journal/sx.2610.00001)
  * - ScholarXiv abs URL (https://www.scholarxiv.com/abs/2401.01234)
  * - ScholarXiv pdf URL (https://www.scholarxiv.com/pdf/2401.01234)
  * - arXiv abs URL (https://arxiv.org/abs/2401.01234)
  * - arXiv pdf URL (https://arxiv.org/pdf/2401.01234)
- * - Bare IDs (2401.01234)
- * - Versioned IDs (2401.01234v1)
+ * - Bare IDs (2401.01234, sx.2610.00001)
+ * - Versioned IDs (2401.01234v1, sx.2610.00001v1)
  */
 export function extractPaperId(input: string): string | null {
   if (!input || typeof input !== 'string') return null
@@ -86,7 +88,11 @@ function normalizeScholarXivResults(papers: ScholarXivPaper[]): ResearchSource[]
     )
     .map((paper) => {
       const paperId = paper.extractedID || paper.id
-      const fallbackUrl = paperId ? `https://www.scholarxiv.com/abs/${paperId}` : ''
+      const fallbackUrl = paperId
+        ? paperId.startsWith('sx.')
+          ? `https://www.scholarxiv.com/journal/${paperId}`
+          : `https://www.scholarxiv.com/abs/${paperId}`
+        : ''
       const url = paper.absLink || paper.pdfLink || fallbackUrl
 
       let year: string | undefined
@@ -176,22 +182,109 @@ export async function searchScholarXiv(params: ScholarXivSearchParams): Promise<
 }
 
 /**
- * Retrieve a specific paper by exact ID or URL from ScholarXiv using POST searchFilterString.id.
+ * Fetch and extract metadata from a ScholarXiv journal paper page.
+ * Preprints published via the ScholarXiv journal (e.g. sx.2610.00001) expose
+ * highwire citation meta tags and JSON-LD structured data.
  */
-export async function getScholarXivPaper(paperIdOrUrl: string): Promise<ResearchSource | null> {
-  const { baseUrl, apiKey } = scholarxivEnv()
+export async function fetchScholarXivJournalPaper(idOrUrl: string): Promise<ResearchSource | null> {
+  const match = idOrUrl.match(/(?:sx\.\d{4}\.\d{4,5}(?:v\d+)?)/i)
+  const id = match ? match[0] : idOrUrl.trim()
+  const url = idOrUrl.startsWith('http') ? idOrUrl : `https://www.scholarxiv.com/journal/${id}`
 
-  if (!apiKey) {
-    console.warn('ScholarXiv API key not configured, returning null')
+  try {
+    const html = await new Promise<string>((resolve) => {
+      const req = https.get(
+        url,
+        {
+          maxHeaderSize: 65536,
+          headers: { 'User-Agent': 'ScholarXiv-Companion/1.0 (Research Assistant)' },
+        },
+        (res) => {
+          if (res.statusCode && res.statusCode >= 400) {
+            return resolve('')
+          }
+          let data = ''
+          res.on('data', (chunk) => (data += chunk))
+          res.on('end', () => resolve(data))
+        }
+      )
+      req.on('error', () => resolve(''))
+      req.setTimeout(10_000, () => {
+        req.destroy()
+        resolve('')
+      })
+    })
+
+    if (!html) return null
+
+    // 1. Try JSON-LD structured metadata
+    const jsonLdMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i)
+    let jsonLd: any = null
+    if (jsonLdMatch) {
+      try {
+        jsonLd = JSON.parse(jsonLdMatch[1])
+      } catch {}
+    }
+
+    // 2. Highwire & Dublin Core Meta tags
+    const titleMatch = html.match(/<meta name="(?:citation_title|DC\.title)" content="([^"]+)"/i)
+    const authorMatches = [...html.matchAll(/<meta name="(?:citation_author|DC\.creator)" content="([^"]+)"/gi)].map(
+      (m) => m[1]
+    )
+    const dateMatch = html.match(/<meta name="(?:citation_publication_date|DC\.date)" content="([^"]+)"/i)
+
+    const title = jsonLd?.headline || jsonLd?.name || titleMatch?.[1]
+    if (!title || typeof title !== 'string') return null
+
+    const summary = jsonLd?.abstract || ''
+    const authors =
+      jsonLd?.author && Array.isArray(jsonLd.author)
+        ? jsonLd.author.map((a: any) => a.name).filter(Boolean)
+        : authorMatches
+    const year = dateMatch
+      ? dateMatch[1].split(/[-/]/)[0]
+      : jsonLd?.datePublished
+      ? jsonLd.datePublished.slice(0, 4)
+      : undefined
+
+    return {
+      id,
+      title: title.trim(),
+      summary: summary.trim(),
+      authors,
+      year,
+      url,
+      source: 'ScholarXiv',
+    }
+  } catch (err) {
+    console.warn(`Failed to fetch ScholarXiv journal paper ${id}:`, err)
     return null
   }
+}
 
+/**
+ * Retrieve a specific paper by exact ID or URL from ScholarXiv using POST searchFilterString.id or Journal lookup.
+ */
+export async function getScholarXivPaper(paperIdOrUrl: string): Promise<ResearchSource | null> {
   if (!paperIdOrUrl || typeof paperIdOrUrl !== 'string') {
     return null
   }
 
   const paperId = extractPaperId(paperIdOrUrl) || paperIdOrUrl.trim()
   if (!paperId) return null
+
+  // If this is a ScholarXiv journal paper or URL, fetch the journal metadata directly
+  if (paperId.startsWith('sx.') || paperIdOrUrl.includes('/journal/')) {
+    const journalPaper = await fetchScholarXivJournalPaper(paperIdOrUrl)
+    if (journalPaper) return journalPaper
+  }
+
+  const { baseUrl, apiKey } = scholarxivEnv()
+
+  if (!apiKey) {
+    console.warn('ScholarXiv API key not configured, returning null')
+    return null
+  }
 
   const requestBody = {
     searchFilterString: {
@@ -224,6 +317,11 @@ export async function getScholarXivPaper(paperIdOrUrl: string): Promise<Research
 
     const json = (await response.json()) as Partial<ScholarXivResponse>
     if (!json || typeof json !== 'object' || !Array.isArray(json.data) || json.data.length === 0) {
+      // Fallback: if search API yielded nothing but ID could be a journal paper
+      if (paperId.includes('.')) {
+        const fallbackJournal = await fetchScholarXivJournalPaper(paperId)
+        if (fallbackJournal) return fallbackJournal
+      }
       return null
     }
 

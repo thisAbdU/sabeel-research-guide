@@ -5,8 +5,12 @@ import { Sparkles, User, AlertCircle, Copy, Check, ExternalLink } from "lucide-r
 import { ChatMessageItem } from "@/types/chat";
 import { SourceCard } from "./SourceCard";
 
+import { ResearchSource } from "@/types/chat";
+
 interface ChatMessageProps {
   message: ChatMessageItem;
+  onSelectSource?: (source: ResearchSource) => void;
+  selectedSourceId?: string | null;
 }
 
 function renderFormattedInline(text: string): React.ReactNode {
@@ -123,7 +127,11 @@ function FormattedContent({ content }: { content: string }) {
   );
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  onSelectSource,
+  selectedSourceId,
+}: ChatMessageProps) {
   const [copied, setCopied] = React.useState(false);
   const isUser = message.role === "user";
 
@@ -255,13 +263,13 @@ export function ChatMessage({ message }: ChatMessageProps) {
           )}
         </div>
 
-        {/* Attached ScholarXiv Research Sources */}
+        {/* Attached Sources */}
         {message.sources && message.sources.length > 0 && (
           <div className="space-y-2 pt-1">
             <div className="flex items-center gap-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
-              <ExternalLink className="h-3.5 w-3.5 text-blue-500" />
+              <ExternalLink className="h-3.5 w-3.5 text-zinc-400" />
               <span>
-                {message.mode === "funding" ? "Funding sources" : "ScholarXiv Literature Sources"} ({message.sources.length})
+                {message.mode === "funding" ? "Potential Funders" : "ScholarXiv Literature Sources"} ({message.sources.length})
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -271,6 +279,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
                   source={source}
                   compact
                   variant={message.mode === "funding" ? "funding" : "paper"}
+                  isSelected={selectedSourceId === source.id}
+                  onSelect={onSelectSource}
                 />
               ))}
             </div>

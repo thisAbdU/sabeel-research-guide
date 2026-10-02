@@ -130,6 +130,19 @@ describe('ScholarXiv Client Unit Tests', () => {
     assert.equal(id, '2401.01234v2')
   })
 
+  // 12b. extractPaperId() handles ScholarXiv journal preprints
+  it('12b. extractPaperId() handles ScholarXiv journal URLs and sx. IDs', () => {
+    assert.equal(
+      extractPaperId('https://www.scholarxiv.com/journal/sx.2610.00001'),
+      'sx.2610.00001'
+    )
+    assert.equal(
+      extractPaperId('https://scholarxiv.com/journal/sx.2610.00001v1'),
+      'sx.2610.00001v1'
+    )
+    assert.equal(extractPaperId('sx.2610.00001'), 'sx.2610.00001')
+  })
+
   // 13. extractPaperId() returns null for unsupported input
   it('13. extractPaperId() returns null for unsupported input', () => {
     assert.equal(extractPaperId(''), null)
