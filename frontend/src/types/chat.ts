@@ -10,6 +10,13 @@ export interface ResearchSource {
   url: string;
   source: string;
   year?: string;
+  program?: string;
+  whyMatch?: string;
+  socials?: {
+    website?: string;
+    linkedin?: string;
+    twitter?: string;
+  };
 }
 
 export interface ResearchDirection {

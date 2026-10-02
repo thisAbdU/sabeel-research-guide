@@ -1,12 +1,15 @@
 import Exa from 'exa-js'
 import type { ChatTurn } from '@/lib/ai/complete'
 import type { ResearchSource } from '@/lib/types'
+import { extractPaperId, getScholarXivPaper, searchScholarXiv } from '@/lib/scholarxiv'
 
 type Funder = {
   name?: string
   website?: string
   program?: string
   whyMatch?: string
+  linkedin?: string
+  twitter?: string
 }
 
 const EMPTY = `\n\nFUNDING SEARCH:\nNo grounded funding sources were retrieved.\n- Do NOT invent organizations, grants, deadlines, amounts, or links.\n- Say you could not retrieve documented funding sources right now.\n- Keep "sources": [].`
@@ -27,6 +30,8 @@ const OUTPUT_SCHEMA = {
           website: { type: 'string', format: 'uri' },
           program: { type: 'string' },
           whyMatch: { type: 'string' },
+          linkedin: { type: 'string' },
+          twitter: { type: 'string' },
         },
       },
     },
@@ -48,25 +53,88 @@ function host(url: string) {
   }
 }
 
+export function extractFundingQuery(text: string): string | null {
+  let cleaned = text.trim()
+
+  cleaned = cleaned.replace(
+    /^(?:can\s+you\s+)?(?:please\s+)?(?:find|get|search|look\s+for|suggest)?\s*(?:funding|funders|grants?|fellowships?|investors?|sponsors?)\s+(?:for|to|on)?\s*(?:this|my)?\s*(?:research\s+)?(?:idea|topic|paper|proposal|question|concept|project)?[:\s-]*/i,
+    ''
+  )
+  cleaned = cleaned.replace(/^please\s+find\s+funding[:\s-]*/i, '')
+  cleaned = cleaned.replace(
+    /^i\s+(?:want\s+to|would\s+like\s+to|need\s+to)\s+(?:find\s+funding|get\s+funding|fund)\s+(?:for|on)?[:\s-]*/i,
+    ''
+  )
+  cleaned = cleaned.replace(
+    /^(?:my\s+)?(?:research\s+)?(?:idea|topic|paper|proposal|question|concept|project)[:\s-]*/i,
+    ''
+  )
+  cleaned = cleaned.replace(/^["'“](.*)["'”]$/, '$1').trim()
+
+  if (
+    !cleaned ||
+    cleaned.length < 3 ||
+    /^(?:it|this|that|me|something|anything|idea|topic|paper|research\s+idea)$/i.test(cleaned)
+  ) {
+    return null
+  }
+
+  return cleaned
+}
+
 export async function prepareFundingContext(history: ChatTurn[], message: string) {
   const apiKey = process.env.EXA_AI_API_KEY
-  if (!apiKey) return { sources: [] as ResearchSource[], prompt: EMPTY }
+  if (!apiKey) return { sources: [] as ResearchSource[], prompt: EMPTY, paper: null }
+
+  // 1. Resolve ScholarXiv paper by URL or bare paper ID if provided
+  let matchedPaper: ResearchSource | null = null
+  const paperId = extractPaperId(message)
+
+  if (paperId) {
+    try {
+      matchedPaper = await getScholarXivPaper(paperId)
+      console.info('[funding] Resolved ScholarXiv paper by ID:', paperId, matchedPaper?.title)
+    } catch (err) {
+      console.warn('[funding] ScholarXiv paper lookup failed for ID:', paperId, err)
+    }
+  }
+
+  // 2. If no paper ID found, attempt to match paper title or topic against ScholarXiv
+  if (!matchedPaper) {
+    const cleanedQuery = extractFundingQuery(message)
+    if (cleanedQuery && cleanedQuery.length >= 6) {
+      try {
+        const results = await searchScholarXiv({ query: cleanedQuery, limit: 1 })
+        if (results && results.length > 0) {
+          matchedPaper = results[0]
+          console.info('[funding] Found ScholarXiv paper by title search:', matchedPaper.title)
+        }
+      } catch (err) {
+        console.warn('[funding] ScholarXiv topic search failed:', err)
+      }
+    }
+  }
 
   const prior = history
     .filter((turn) => turn.role === 'user')
     .slice(-2)
     .map((turn) => turn.content)
     .join('\n')
-  const research = `${prior}\n${message}`.trim().slice(0, 4000)
+
+  let research = `${prior}\n${message}`.trim().slice(0, 4000)
+
+  if (matchedPaper) {
+    research = `Paper Title: "${matchedPaper.title}"\nAbstract: ${matchedPaper.summary || 'No abstract available'}\nAuthors: ${matchedPaper.authors.join(', ')}\nPreprint URL: ${matchedPaper.url}\n\nUser Context:\n${message}`.trim().slice(0, 4000)
+  }
 
   const exa = new Exa(apiKey)
   const exaStarted = Date.now()
-  console.info('[funding] Exa agent start', { effort: 'medium', chars: research.length })
+  console.info('[funding] Exa agent start', { effort: 'medium', chars: research.length, paper: matchedPaper?.title })
   const run = await exa.agent.runs.createAndWait(
     {
       query: `Find publicly documented organizations, foundations, grant programs, or companies that may fund this research. Only include real organizations with official websites.\n\nResearch:\n${research}`,
       systemPrompt:
-        'Return potential funding matches only. Do not claim an organization will fund the researcher or that they are eligible. Prefer official program pages over news roundups.',
+        'Return potential funding matches only. Do not claim an organization will fund the researcher or that they are eligible. Prefer official program pages over news roundups. When available, provide their LinkedIn or Twitter profile URLs.',
       outputSchema: OUTPUT_SCHEMA,
       effort: 'medium',
     },
@@ -95,6 +163,13 @@ export async function prepareFundingContext(history: ChatTurn[], message: string
       summary: funder?.whyMatch,
       url: citation.url,
       source: 'Exa',
+      program: funder?.program,
+      whyMatch: funder?.whyMatch,
+      socials: {
+        website: funder?.website || citation.url,
+        linkedin: funder?.linkedin || undefined,
+        twitter: funder?.twitter || undefined,
+      },
     })
   }
 
@@ -108,10 +183,17 @@ export async function prepareFundingContext(history: ChatTurn[], message: string
       summary: funder.whyMatch,
       url: funder.website,
       source: 'Exa',
+      program: funder.program,
+      whyMatch: funder.whyMatch,
+      socials: {
+        website: funder.website,
+        linkedin: funder.linkedin || undefined,
+        twitter: funder.twitter || undefined,
+      },
     })
   }
 
-  if (sources.length === 0) return { sources, prompt: EMPTY }
+  if (sources.length === 0) return { sources, prompt: EMPTY, paper: matchedPaper }
 
   const list = funders
     .map((funder, index) => {
@@ -131,5 +213,6 @@ export async function prepareFundingContext(history: ChatTurn[], message: string
 
   const prompt = `\n\nGROUNDED FUNDING MATCHES FROM EXA:\n${list}\n\nSOURCE PAGES:\n${pages}\n\nThe interface already shows these funders as cards. Do not list them again. Do not use headings, bullets, or numbered questions.\nWrite exactly one sentence naming the single missing detail that would make the next search sharper, such as a country, a population, or an outcome.\nKeep "sources": [] and "researchDirections": [].`
 
-  return { sources, prompt }
+  return { sources, prompt, paper: matchedPaper }
 }
+

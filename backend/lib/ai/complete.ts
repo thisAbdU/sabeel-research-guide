@@ -69,27 +69,32 @@ export async function completeChat(
     }
   } else if (mode === 'funding') {
     allowDirections = false
+    let matchedPaper: ResearchSource | null = null
     try {
       const funding = await prepareFundingContext(history, message)
       sources = funding.sources
+      matchedPaper = funding.paper ?? null
       enhancedSystemPrompt += funding.prompt
       onStatus?.(
         sources.length ? `Found ${sources.length} potential funders` : 'No documented funders yet',
       )
-      console.info('[funding] context ready', { sources: sources.length })
+      console.info('[funding] context ready', { sources: sources.length, paper: matchedPaper?.title })
     } catch (err) {
       const messageText = err instanceof Error ? err.message : String(err)
       console.error('[funding] Exa failed, continuing to Groq without sources:', messageText)
       sources = []
       enhancedSystemPrompt += `\n\nFUNDING SEARCH:\nA web search for funders failed.\n- Do NOT invent organizations, grants, deadlines, amounts, or links.\n- Say documented funding sources could not be retrieved right now.\n- Keep "sources": [].`
     }
-  }
 
-  if (mode === 'funding' && sources.length > 0) {
-    return {
-      content: `Here are ${sources.length} potential funding organizations related to this research. These are potential matches, not a guarantee of funding.`,
-      researchDirections: [],
-      sources,
+    if (sources.length > 0) {
+      const paperContext = matchedPaper
+        ? `grounded in the ScholarXiv preprint "${matchedPaper.title}"`
+        : 'related to your research topic'
+      return {
+        content: `Here are ${sources.length} potential funding organizations ${paperContext}. These are potential matches, not a guarantee of funding. Click any card below to view detailed match rationale and official contact profiles.`,
+        researchDirections: [],
+        sources,
+      }
     }
   }
 
