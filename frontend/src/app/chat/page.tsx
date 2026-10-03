@@ -25,6 +25,7 @@ import { ChatMode, ChatMessageItem, ResearchSource } from "@/types/chat";
 import { useAuth } from "@/context/AuthContext";
 import { sendChatMessage, ChatApiError } from "@/services/chat";
 import { useVoicePipeline } from "@/hooks/useVoicePipeline";
+import { LiveVoiceMode } from "@/components/chat/LiveVoiceMode";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -352,9 +353,17 @@ export default function ChatPage() {
                 voiceAvailable={voice.available}
                 voicePhase={voice.phase}
                 voiceActive={voice.isSessionOpen}
+                voiceErrorCode={voice.errorCode}
                 onToggleVoice={() => {
                   void voice.toggle();
                 }}
+                onInterruptVoice={voice.interrupt}
+                onDisconnectVoice={voice.disconnect}
+                onRetryVoice={() => {
+                  void voice.connect();
+                }}
+                getInputLevel={voice.getInputLevel}
+                getOutputLevel={voice.getOutputLevel}
               />
             </div>
           </div>
@@ -437,6 +446,23 @@ export default function ChatPage() {
               />
             </div>
           </div>
+        )}
+
+        {/* Live Voice Conversation Overlay (ChatGPT-style experience) */}
+        {voice.isSessionOpen && (
+          <LiveVoiceMode
+            phase={voice.phase}
+            errorCode={voice.errorCode}
+            mode={currentMode}
+            modeTitle={`${activeConfig.title} · ${activeConfig.headline}`}
+            getInputLevel={voice.getInputLevel}
+            getOutputLevel={voice.getOutputLevel}
+            onInterrupt={voice.interrupt}
+            onExit={voice.disconnect}
+            onRetry={() => {
+              void voice.connect();
+            }}
+          />
         )}
       </div>
     </AppShell>

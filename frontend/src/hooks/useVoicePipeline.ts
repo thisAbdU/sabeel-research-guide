@@ -114,16 +114,54 @@ export function useVoicePipeline(options: {
   }, [client, options.userId, options.userEmail]);
 
   const phase = mapVoicePhase(voice.status);
-  const isSessionOpen = phase !== "ready" && phase !== "error";
+  const [sessionActive, setSessionActive] = React.useState(false);
+
+  React.useEffect(() => {
+    if (
+      voice.status === "connecting" ||
+      voice.status === "listening" ||
+      voice.status === "executing" ||
+      voice.status === "thinking" ||
+      voice.status === "speaking"
+    ) {
+      setSessionActive(true);
+    } else if (voice.status === "idle") {
+      setSessionActive(false);
+    }
+  }, [voice.status]);
+
+  const isSessionOpen = sessionActive || (voice.status !== "idle" && voice.status !== "armed");
+
+  const disconnect = React.useCallback(() => {
+    setSessionActive(false);
+    voice.disconnect();
+  }, [voice]);
+
+  const connect = React.useCallback(async () => {
+    setSessionActive(true);
+    await voice.connect();
+  }, [voice]);
 
   const toggle = React.useCallback(async () => {
     if (!client) return;
     if (isSessionOpen) {
-      voice.disconnect();
+      disconnect();
       return;
     }
-    await voice.connect();
-  }, [client, isSessionOpen, voice]);
+    await connect();
+  }, [client, isSessionOpen, disconnect, connect]);
+
+  const interrupt = React.useCallback(() => {
+    voice.interrupt();
+  }, [voice]);
+
+  const getInputLevel = React.useCallback(() => {
+    return typeof voice.getInputLevel === "function" ? voice.getInputLevel() : 0;
+  }, [voice]);
+
+  const getOutputLevel = React.useCallback(() => {
+    return typeof voice.getOutputLevel === "function" ? voice.getOutputLevel() : 0;
+  }, [voice]);
 
   return {
     available: Boolean(client),
@@ -132,8 +170,11 @@ export function useVoicePipeline(options: {
     currentAction: voice.currentAction,
     errorCode: voice.errorCode,
     isSessionOpen,
-    connect: voice.connect,
-    disconnect: voice.disconnect,
+    connect,
+    disconnect,
+    interrupt,
+    getInputLevel,
+    getOutputLevel,
     toggle,
   };
 }

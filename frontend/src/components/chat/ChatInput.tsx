@@ -14,11 +14,16 @@ interface ChatInputProps {
   placeholder?: string;
   disabled?: boolean;
   isLoading?: boolean;
-  /** Person 2 pipeline — Person 1 owns fuller voice UI chrome */
   voiceAvailable?: boolean;
   voicePhase?: VoicePhase;
   voiceActive?: boolean;
+  voiceErrorCode?: string | null;
   onToggleVoice?: () => void;
+  onInterruptVoice?: () => void;
+  onDisconnectVoice?: () => void;
+  onRetryVoice?: () => void;
+  getInputLevel?: () => number;
+  getOutputLevel?: () => number;
 }
 
 const VOICE_PHASE_LABEL: Record<VoicePhase, string> = {
@@ -40,7 +45,13 @@ export function ChatInput({
   voiceAvailable = false,
   voicePhase = "ready",
   voiceActive = false,
+  voiceErrorCode,
   onToggleVoice,
+  onInterruptVoice,
+  onDisconnectVoice,
+  onRetryVoice,
+  getInputLevel,
+  getOutputLevel,
 }: ChatInputProps) {
   const [text, setText] = React.useState("");
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -117,14 +128,16 @@ export function ChatInput({
             <button
               type="button"
               title={
-                voiceAvailable
-                  ? VOICE_PHASE_LABEL[voicePhase]
-                  : "Set NEXT_PUBLIC_VOXIDE_PUBLIC_KEY to enable voice"
+                !voiceAvailable
+                  ? "Set NEXT_PUBLIC_VOXIDE_PUBLIC_KEY to enable voice"
+                  : voiceActive
+                  ? "Exit live voice conversation"
+                  : "Start live voice conversation"
               }
               disabled={!voiceAvailable || disabled}
               onClick={onToggleVoice}
               aria-pressed={voiceActive}
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
                 voiceActive
                   ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                   : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
@@ -134,7 +147,7 @@ export function ChatInput({
             </button>
             {voiceAvailable && (
               <span className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
-                {VOICE_PHASE_LABEL[voicePhase]}
+                {voiceActive ? "Live Voice Active" : "Live Voice"}
               </span>
             )}
           </div>
