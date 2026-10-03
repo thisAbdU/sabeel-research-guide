@@ -45,6 +45,8 @@ export function toConversation(row: {
   research_project_id: string | null
   mode: Conversation['mode']
   title: string | null
+  message_count?: number | null
+  last_message_preview?: string | null
   created_at: string
   updated_at: string
 }): Conversation {
@@ -54,6 +56,8 @@ export function toConversation(row: {
     researchProjectId: row.research_project_id,
     mode: row.mode,
     title: row.title,
+    messageCount: row.message_count ?? 0,
+    lastMessagePreview: row.last_message_preview ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

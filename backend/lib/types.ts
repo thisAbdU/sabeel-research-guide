@@ -41,8 +41,22 @@ export type ChatResponse = {
   data: {
     conversationId: string
     message: ChatReply
+    userMessage?: {
+      id: string
+      role: 'user'
+      content: string
+      createdAt: string
+    }
     sources: ResearchSource[]
     researchDirections: ResearchDirection[]
+    conversation?: {
+      id: string
+      mode: ChatMode
+      title?: string
+      messageCount: number
+      lastMessagePreview: string
+      updatedAt: string
+    }
   }
 }
 
@@ -72,6 +86,8 @@ export type Conversation = {
   researchProjectId: string | null
   mode: ChatMode
   title: string | null
+  messageCount: number
+  lastMessagePreview: string | null
   createdAt: string
   updatedAt: string
 }
