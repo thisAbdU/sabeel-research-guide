@@ -457,7 +457,7 @@ backend/app/api/voice/route.ts             |   5 +-
 
 You are writing a daily product changelog from git history.
 
-Current version: v1.4
+Current version: v1.5
 Repo: sabeel-research-guide
 
 Produce exactly three artifacts, in this order, nothing else:
