@@ -449,3 +449,78 @@ backend/app/api/voice/route.ts             |   5 +-
  tools/readmadeprompt.txt                   |  76 +++++++++++++
  6 files changed, 222 insertions(+), 93 deletions(-)
 ```
+
+
+################################################################################
+# 2026-10-02 22:09:07
+################################################################################
+
+You are writing a daily product changelog from git history.
+
+Current version: v1.4
+Repo: sabeel-research-guide
+
+Produce exactly three artifacts, in this order, nothing else:
+
+1) Version Tag
+   - Semver tag for this release (bump from current version).
+   - One line, e.g. v1.1
+
+2) Update Title
+   - One short public-facing title for this day's changes.
+
+3) changelog.md
+   - Markdown body only (no extra wrapping).
+   - User-facing: what changed, why it matters.
+   - Group as Added / Changed / Fixed when it fits.
+   - Skip noise (lockfiles, formatting-only, generated files) unless it changes behavior.
+
+Commit messages since last changelog:
+```
+7ea728e feat(chat): simplify funder cards, add   on-demand inspector panel, and support ScholarXiv   journal preprints
+0b0f1f6 backend   automatically resolves ScholarXiv paper URLs, paper   IDs, and paper titles to ground Exa AI web searches
+a782bb9 connect discover backend
+d1145f8 feat: integrate voixde
+```
+
+Files changed (status + line counts). Use this instead of patches:
+```
+M	backend/app/api/voice/route.ts
+M	backend/lib/ai/complete.ts
+M	backend/lib/ai/funding.ts
+M	backend/lib/scholarxiv.ts
+M	backend/lib/types.ts
+M	backend/test/scholarxiv.test.ts
+M	frontend/package.json
+M	frontend/src/app/chat/page.tsx
+M	frontend/src/app/discover/page.tsx
+M	frontend/src/components/chat/ChatInput.tsx
+M	frontend/src/components/chat/ChatMessage.tsx
+M	frontend/src/components/chat/SourceCard.tsx
+A	frontend/src/components/chat/SourceDetailsPanel.tsx
+A	frontend/src/hooks/useVoicePipeline.ts
+A	frontend/src/lib/voxide.ts
+M	frontend/src/types/chat.ts
+M	tools/.changelog_state
+M	tools/readmadeprompt.txt
+
+backend/app/api/voice/route.ts                     |   5 +-
+ backend/lib/ai/complete.ts                         |  19 +-
+ backend/lib/ai/funding.ts                          |  95 +++++-
+ backend/lib/scholarxiv.ts                          | 118 +++++++-
+ backend/lib/types.ts                               |   7 +
+ backend/test/scholarxiv.test.ts                    |  13 +
+ frontend/package.json                              |   1 +
+ frontend/src/app/chat/page.tsx                     | 301 +++++++++++--------
+ frontend/src/app/discover/page.tsx                 | 323 +++++++++++++++------
+ frontend/src/components/chat/ChatInput.tsx         |  60 +++-
+ frontend/src/components/chat/ChatMessage.tsx       |  18 +-
+ frontend/src/components/chat/SourceCard.tsx        | 152 +++++-----
+ .../src/components/chat/SourceDetailsPanel.tsx     | 169 +++++++++++
+ frontend/src/hooks/useVoicePipeline.ts             | 139 +++++++++
+ frontend/src/lib/voxide.ts                         |  21 ++
+ frontend/src/types/chat.ts                         |   7 +
+ tools/.changelog_state                             |   4 +-
+ tools/readmadeprompt.txt                           |  48 +++
+ 18 files changed, 1170 insertions(+), 330 deletions(-)
+```
