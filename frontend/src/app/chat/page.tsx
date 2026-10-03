@@ -26,6 +26,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useChat } from "@/context/ChatContext";
 import { useVoicePipeline } from "@/hooks/useVoicePipeline";
 import { LiveVoiceMode } from "@/components/chat/LiveVoiceMode";
+import { PublishOfferModal } from "@/components/chat/PublishOfferModal";
 
 function ChatPageInner() {
   const router = useRouter();
@@ -47,7 +48,18 @@ function ChatPageInner() {
     openConversation,
     startNewChat,
     sendMessage,
+    suggestPublish,
+    publishPaperUrl,
+    clearPublishOffer,
   } = useChat();
+
+  const [publishOpen, setPublishOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (suggestPublish && currentMode === "funding") {
+      setPublishOpen(true);
+    }
+  }, [suggestPublish, currentMode]);
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const openedFromQuery = React.useRef<string | null>(null);
@@ -63,7 +75,10 @@ function ChatPageInner() {
   // URL is source of truth for switching history items
   React.useEffect(() => {
     if (authLoading || !user) return;
-    if (!conversationId) return;
+    if (!conversationId) {
+      openedFromQuery.current = null;
+      return;
+    }
     if (openedFromQuery.current === conversationId) return;
     openedFromQuery.current = conversationId;
     void openConversation(conversationId);
@@ -411,6 +426,19 @@ function ChatPageInner() {
             }}
           />
         )}
+
+        <PublishOfferModal
+          open={publishOpen}
+          conversationId={activeId?.startsWith("temp-") ? null : activeId}
+          paperUrl={publishPaperUrl}
+          onClose={() => {
+            setPublishOpen(false);
+            clearPublishOffer();
+          }}
+          onPublished={() => {
+            clearPublishOffer();
+          }}
+        />
       </div>
     </AppShell>
   );

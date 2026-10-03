@@ -47,6 +47,8 @@ export interface ChatResponseData {
   };
   sources: ResearchSource[];
   researchDirections: ResearchDirection[];
+  suggestPublish?: boolean;
+  paper?: ResearchSource | null;
   conversation?: {
     id: string;
     mode: ChatMode;
@@ -85,6 +87,8 @@ export interface PersistedMessage {
   role: MessageRole;
   content: string;
   createdAt: string;
+  sources?: ResearchSource[];
+  researchDirections?: ResearchDirection[];
 }
 
 export interface ChatMessageItem {

@@ -13,6 +13,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/Card";
 import { apiFetch } from "@/lib/api";
+import { DISCOVER_FIELDS } from "@/lib/discover-fields";
+import { SupportModal } from "@/components/discover/SupportModal";
 
 interface DiscoverResearch {
   id: string;
@@ -43,8 +45,9 @@ export default function DiscoverPage() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [retryTrigger, setRetryTrigger] = React.useState(0);
+  const [supportTarget, setSupportTarget] = React.useState<DiscoverResearch | null>(null);
 
-  const fields = ["All", "AI & Tech", "Education", "Healthcare", "Agriculture", "Economics"];
+  const fields = ["All", ...DISCOVER_FIELDS];
 
   // Debounce search query input by ~300ms
   React.useEffect(() => {
@@ -228,8 +231,8 @@ export default function DiscoverPage() {
         {!isLoading && !error && items.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-2">
             {items.map((item) => (
-              <Card key={item.id} className="flex flex-col justify-between hover:border-zinc-300 transition-colors">
-                <CardHeader className="space-y-3">
+              <Card key={item.id} className="flex flex-col hover:border-zinc-300 transition-colors">
+                <CardHeader className="space-y-2 pb-3">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-mono text-[11px] text-zinc-600 dark:text-zinc-400 font-medium">
                       {item.field || "General Research"}
@@ -268,13 +271,13 @@ export default function DiscoverPage() {
                   )}
                 </CardHeader>
 
-                <CardContent>
+                <CardContent className="pt-0 pb-3">
                   <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 text-xs leading-relaxed text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400 line-clamp-4">
                     {item.description || "No description provided."}
                   </div>
                 </CardContent>
 
-                <CardFooter className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
+                <CardFooter className="mt-auto flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800/80">
                   {item.researchUrl ? (
                     <a
                       href={item.researchUrl}
@@ -284,18 +287,23 @@ export default function DiscoverPage() {
                     >
                       <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-lg">
                         <BookOpen className="h-3.5 w-3.5" />
-                        Read Research
+                        View Research
                       </Button>
                     </a>
                   ) : (
                     <Button variant="outline" size="sm" disabled className="gap-1.5 text-xs rounded-lg opacity-50 cursor-not-allowed">
                       <BookOpen className="h-3.5 w-3.5" />
-                      Read Research
+                      View Research
                     </Button>
                   )}
 
                   {item.supportEnabled ? (
-                    <Button variant="default" size="sm" className="gap-1.5 text-xs rounded-lg">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="gap-1.5 text-xs rounded-lg"
+                      onClick={() => setSupportTarget(item)}
+                    >
                       <Coffee className="h-3.5 w-3.5" />
                       <span>Support</span>
                     </Button>
@@ -312,6 +320,13 @@ export default function DiscoverPage() {
             Discover only displays research that authors have explicitly chosen to publish. External ScholarXiv search results remain on ScholarXiv.
           </p>
         </div>
+
+        <SupportModal
+          open={!!supportTarget}
+          researchId={supportTarget?.id ?? ""}
+          researchTitle={supportTarget?.title ?? ""}
+          onClose={() => setSupportTarget(null)}
+        />
       </div>
     </AppShell>
   );

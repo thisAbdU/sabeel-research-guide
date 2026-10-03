@@ -15,6 +15,8 @@ type Completion = {
   content: string
   researchDirections: ResearchDirection[]
   sources: ResearchSource[]
+  suggestPublish?: boolean
+  paper?: ResearchSource | null
 }
 
 export async function completeChat(
@@ -28,6 +30,8 @@ export async function completeChat(
   let sources: ResearchSource[] = []
   let enhancedSystemPrompt = systemPromptFor(mode)
   let allowDirections = true
+  let suggestPublish = false
+  let fundingPaper: ResearchSource | null = null
 
   if (mode === 'vent') {
     const lastSearchedQuery = findLastVentQuery(history)
@@ -69,31 +73,43 @@ export async function completeChat(
     }
   } else if (mode === 'funding') {
     allowDirections = false
-    let matchedPaper: ResearchSource | null = null
     try {
       const funding = await prepareFundingContext(history, message)
       sources = funding.sources
-      matchedPaper = funding.paper ?? null
+      fundingPaper = funding.paper ?? null
+      suggestPublish = funding.readiness.suggestPublish
       enhancedSystemPrompt += funding.prompt
       onStatus?.(
-        sources.length ? `Found ${sources.length} potential funders` : 'No documented funders yet',
+        funding.stage === 'clarify'
+          ? 'Clarifying your research before matching funders'
+          : sources.length
+            ? `Found ${sources.length} potential funders`
+            : 'No documented funders yet',
       )
-      console.info('[funding] context ready', { sources: sources.length, paper: matchedPaper?.title })
+      console.info('[funding] context ready', {
+        stage: funding.stage,
+        sources: sources.length,
+        paper: fundingPaper?.title,
+        suggestPublish,
+      })
     } catch (err) {
       const messageText = err instanceof Error ? err.message : String(err)
       console.error('[funding] Exa failed, continuing to Groq without sources:', messageText)
       sources = []
+      suggestPublish = true
       enhancedSystemPrompt += `\n\nFUNDING SEARCH:\nA web search for funders failed.\n- Do NOT invent organizations, grants, deadlines, amounts, or links.\n- Say documented funding sources could not be retrieved right now.\n- Keep "sources": [].`
     }
 
     if (sources.length > 0) {
-      const paperContext = matchedPaper
-        ? `grounded in the ScholarXiv preprint "${matchedPaper.title}"`
+      const paperContext = fundingPaper
+        ? `grounded in the ScholarXiv preprint "${fundingPaper.title}"`
         : 'related to your research topic'
       return {
         content: `Here are ${sources.length} potential funding organizations ${paperContext}. These are potential matches, not a guarantee of funding. Click any card below to view detailed match rationale and official contact profiles.`,
         researchDirections: [],
         sources,
+        suggestPublish: true,
+        paper: fundingPaper,
       }
     }
   }
@@ -181,6 +197,8 @@ export async function completeChat(
     ...parsed,
     researchDirections: finalDirections,
     sources,
+    suggestPublish: mode === 'funding' ? suggestPublish : false,
+    paper: mode === 'funding' ? fundingPaper : null,
   }
 }
 

@@ -69,13 +69,22 @@ export function toMessage(row: {
   role: Message['role']
   content: string
   created_at: string
+  sources?: unknown
+  research_directions?: unknown
 }): Message {
+  const sources = Array.isArray(row.sources) ? (row.sources as Message['sources']) : []
+  const researchDirections = Array.isArray(row.research_directions)
+    ? (row.research_directions as Message['researchDirections'])
+    : []
+
   return {
     id: row.id,
     conversationId: row.conversation_id,
     role: row.role,
     content: row.content,
     createdAt: row.created_at,
+    sources,
+    researchDirections,
   }
 }
 

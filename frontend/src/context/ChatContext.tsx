@@ -38,12 +38,22 @@ interface ChatContextType {
   openConversation: (id: string) => Promise<void>;
   startNewChat: (mode?: ChatMode) => void;
   sendMessage: (content: string) => Promise<string | null>;
+  suggestPublish: boolean;
+  publishPaperUrl: string | null;
+  clearPublishOffer: () => void;
 }
 
 const ChatContext = React.createContext<ChatContextType | undefined>(undefined);
 
 function toChatItems(
-  rows: { id: string; role: string; content: string; createdAt: string }[],
+  rows: {
+    id: string;
+    role: string;
+    content: string;
+    createdAt: string;
+    sources?: ResearchSource[];
+    researchDirections?: ChatMessageItem["researchDirections"];
+  }[],
   mode: ChatMode
 ): ChatMessageItem[] {
   return rows.map((row) => ({
@@ -52,7 +62,26 @@ function toChatItems(
     content: row.content,
     createdAt: row.createdAt,
     mode,
+    sources: row.sources && row.sources.length > 0 ? row.sources : undefined,
+    researchDirections:
+      row.researchDirections && row.researchDirections.length > 0
+        ? row.researchDirections
+        : undefined,
   }));
+}
+
+function collectSources(items: ChatMessageItem[]): ResearchSource[] {
+  const out: ResearchSource[] = [];
+  const keys = new Set<string>();
+  for (const msg of items) {
+    for (const source of msg.sources ?? []) {
+      const key = source.id || source.title;
+      if (keys.has(key)) continue;
+      keys.add(key);
+      out.push(source);
+    }
+  }
+  return out;
 }
 
 function upsertMeta(
@@ -83,6 +112,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [errorBanner, setErrorBanner] = React.useState<string | null>(null);
   const [sessionSources, setSessionSources] = React.useState<ResearchSource[]>([]);
   const [selectedSource, setSelectedSource] = React.useState<ResearchSource | null>(null);
+  const [suggestPublish, setSuggestPublish] = React.useState(false);
+  const [publishPaperUrl, setPublishPaperUrl] = React.useState<string | null>(null);
 
   const activeIdRef = React.useRef(activeId);
   activeIdRef.current = activeId;
@@ -171,7 +202,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (meta) setCurrentModeState(meta.mode);
 
     if (threadsRef.current.has(id)) {
-      setSessionSources([]);
+      const cached = threadsRef.current.get(id) ?? [];
+      setSessionSources(collectSources(cached));
       return;
     }
 
@@ -184,14 +216,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       // Stale response — user already switched away
       if (loadingThreadRef.current !== id) return;
 
+      const items = toChatItems(rows, conversation.mode);
       setConversations((prev) => upsertMeta(prev, conversation));
       setCurrentModeState(conversation.mode);
       setThreads((prev) => {
         const next = new Map(prev);
-        next.set(id, toChatItems(rows, conversation.mode));
+        next.set(id, items);
         return next;
       });
-      setSessionSources([]);
+      setSessionSources(collectSources(items));
     } catch (err) {
       if (loadingThreadRef.current !== id) return;
       const msg =
@@ -217,7 +250,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setSelectedSource(null);
     setErrorBanner(null);
     setActivity(null);
+    setSuggestPublish(false);
+    setPublishPaperUrl(null);
     if (mode) setCurrentModeState(mode);
+  }, []);
+
+  const clearPublishOffer = React.useCallback(() => {
+    setSuggestPublish(false);
   }, []);
 
   const setCurrentMode = React.useCallback((mode: ChatMode) => {
@@ -351,6 +390,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           });
         }
 
+        if (mode === "funding" && result.suggestPublish) {
+          setSuggestPublish(true);
+          const fromPaper = result.paper?.url ?? null;
+          const fromText =
+            trimmed.match(
+              /https?:\/\/(?:www\.)?scholarxiv\.com\/(?:journal|abs|pdf)\/[^\s)]+/i
+            )?.[0] ?? null;
+          setPublishPaperUrl(fromPaper || fromText);
+        }
+
         return result.message.content;
       } catch (err) {
         const errorMessage =
@@ -401,6 +450,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       openConversation,
       startNewChat,
       sendMessage,
+      suggestPublish,
+      publishPaperUrl,
+      clearPublishOffer,
     }),
     [
       conversations,
@@ -421,6 +473,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       openConversation,
       startNewChat,
       sendMessage,
+      suggestPublish,
+      publishPaperUrl,
+      clearPublishOffer,
     ]
   );
 

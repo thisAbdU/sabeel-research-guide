@@ -1,26 +1,51 @@
+"use client";
+
+import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Sparkles,
   Flame,
   Coins,
   Compass,
   ArrowRight,
-  BookOpen,
   Coffee,
+  Loader2,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/Button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/Card";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Home() {
+  const router = useRouter();
+  const { user, isLoading } = useAuth();
+
+  React.useEffect(() => {
+    if (!isLoading && user) {
+      router.replace("/chat");
+    }
+  }, [isLoading, user, router]);
+
+  if (isLoading || user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#fcfcfd] dark:bg-zinc-950">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-[#fcfcfd] dark:bg-zinc-950">
       <Navbar />
 
-      {/* Hero Section */}
       <section className="relative overflow-hidden pt-16 pb-20 sm:pt-24 sm:pb-28">
         <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
-          {/* Main Title */}
           <h1 className="text-4xl font-extrabold tracking-tight text-zinc-950 sm:text-6xl dark:text-zinc-50">
             From vague ideas to <br className="hidden sm:inline" />
             <span className="bg-gradient-to-r from-zinc-900 via-zinc-700 to-zinc-500 bg-clip-text text-transparent dark:from-zinc-100 dark:via-zinc-300 dark:to-zinc-500">
@@ -39,7 +64,6 @@ export default function Home() {
             <span className="font-semibold text-zinc-900 dark:text-zinc-100">Discover</span>.
           </p>
 
-          {/* Action CTAs */}
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link href="/chat">
               <Button size="lg" className="w-full sm:w-auto px-7 gap-2 shadow-sm rounded-xl">
@@ -56,7 +80,6 @@ export default function Home() {
             </Link>
           </div>
 
-          {/* Clean Workflow Sequence */}
           <div className="mt-12 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-500">
             <span className="font-medium text-zinc-400 mr-1">Workflow:</span>
             <span className="text-zinc-700 dark:text-zinc-300 font-medium">Vent</span>
@@ -71,7 +94,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Visual Preview Shell Card */}
         <div className="mx-auto mt-12 max-w-4xl px-4 sm:px-6">
           <div className="rounded-2xl border border-zinc-200/90 bg-white p-3 shadow-md dark:border-zinc-800 dark:bg-zinc-900/90">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-3 px-3 dark:border-zinc-800">
@@ -95,14 +117,12 @@ export default function Home() {
             </div>
 
             <div className="p-4 sm:p-6 space-y-4">
-              {/* User Prompt Mock */}
               <div className="flex items-start gap-3 justify-end">
                 <div className="max-w-md rounded-xl bg-zinc-900 px-4 py-3 text-sm text-white dark:bg-zinc-100 dark:text-zinc-950">
                   &ldquo;I want to research AI and education, but I don&apos;t know where to begin.&rdquo;
                 </div>
               </div>
 
-              {/* Companion Response Mock */}
               <div className="flex items-start gap-3">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
                   <Sparkles className="h-4 w-4" />
@@ -116,7 +136,6 @@ export default function Home() {
                     <li>Specific AI technology (e.g. LLM tutors vs automated grading)</li>
                     <li>Context or region (e.g. Jimma or Addis Ababa, Ethiopia)</li>
                   </ul>
-                  {/* ScholarXiv Source Card Preview */}
                   <div className="mt-2 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700/60 dark:bg-zinc-800/80">
                     <div className="flex items-center justify-between text-xs text-zinc-500">
                       <span className="font-mono text-zinc-600 dark:text-zinc-300">
@@ -135,7 +154,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Feature Pillars Grid */}
       <section className="border-t border-zinc-200/80 bg-zinc-50/50 py-16 dark:border-zinc-800 dark:bg-zinc-900/20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
           <div className="text-center">
@@ -148,7 +166,6 @@ export default function Home() {
           </div>
 
           <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Pillar 1: Vent */}
             <Card className="hover:border-zinc-300 transition-colors">
               <CardHeader>
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 mb-2">
@@ -161,7 +178,6 @@ export default function Home() {
               </CardHeader>
             </Card>
 
-            {/* Pillar 2: Roast */}
             <Card className="hover:border-zinc-300 transition-colors">
               <CardHeader>
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 mb-2">
@@ -174,7 +190,6 @@ export default function Home() {
               </CardHeader>
             </Card>
 
-            {/* Pillar 3: Get Funding */}
             <Card className="hover:border-zinc-300 transition-colors">
               <CardHeader>
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 mb-2">
@@ -187,7 +202,6 @@ export default function Home() {
               </CardHeader>
             </Card>
 
-            {/* Pillar 4: Discover & Support */}
             <Card className="hover:border-zinc-300 transition-colors">
               <CardHeader>
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 mb-2">
@@ -203,7 +217,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="mt-auto border-t border-zinc-200 py-8 text-center text-xs text-zinc-500 dark:border-zinc-800">
         <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">

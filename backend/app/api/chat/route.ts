@@ -88,7 +88,7 @@ export async function GET(request: Request) {
 
     let query = auth.supabase
       .from('messages')
-      .select('id, conversation_id, role, content, created_at')
+      .select('id, conversation_id, role, content, created_at, sources, research_directions')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: false })
       .limit(messageLimit + 1)
@@ -242,10 +242,22 @@ export async function POST(request: Request) {
     const { data: rows, error: persistError } = await auth.supabase
       .from('messages')
       .insert([
-        { conversation_id: conversationId, role: 'user', content: parsed.message },
-        { conversation_id: conversationId, role: 'assistant', content: assistant.content },
+        {
+          conversation_id: conversationId,
+          role: 'user',
+          content: parsed.message,
+          sources: [],
+          research_directions: [],
+        },
+        {
+          conversation_id: conversationId,
+          role: 'assistant',
+          content: assistant.content,
+          sources: assistant.sources ?? [],
+          research_directions: assistant.researchDirections ?? [],
+        },
       ])
-      .select('id, role, content, created_at')
+      .select('id, role, content, created_at, sources, research_directions')
 
     if (persistError || !rows) throw new Error(persistError?.message ?? 'Could not save messages')
 
@@ -272,6 +284,8 @@ export async function POST(request: Request) {
           : undefined,
         sources: assistant.sources,
         researchDirections: assistant.researchDirections,
+        suggestPublish: !!assistant.suggestPublish,
+        paper: assistant.paper ?? null,
         conversation: {
           id: conversationId,
           mode,

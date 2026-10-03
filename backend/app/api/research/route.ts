@@ -11,6 +11,7 @@ import {
   viewerClient,
   type ResearchWrite,
 } from '@/lib/research'
+import { normalizeDiscoverField } from '@/lib/research-fields'
 
 export function OPTIONS() {
   return options()
@@ -22,7 +23,8 @@ export async function GET(request: Request) {
 
   const params = new URL(request.url).searchParams
   const q = discoverSearchFilter(params.get('q') ?? '')
-  const field = exactFilter(params.get('field'))
+  const fieldParam = exactFilter(params.get('field'))
+  const field = fieldParam ? normalizeDiscoverField(fieldParam) : null
   const location = exactFilter(params.get('location'))
 
   let query = viewer.supabase
@@ -32,7 +34,8 @@ export async function GET(request: Request) {
     .eq('support_settings.enabled', true)
     .order('published_at', { ascending: false })
 
-  if (field) query = query.ilike('field', field)
+  // Exact match on canonical Discover labels (e.g. "AI & Tech")
+  if (field) query = query.eq('field', field)
   if (location) query = query.ilike('location', location)
   if (q) query = query.or(q)
 

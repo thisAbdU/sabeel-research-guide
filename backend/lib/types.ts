@@ -49,6 +49,8 @@ export type ChatResponse = {
     }
     sources: ResearchSource[]
     researchDirections: ResearchDirection[]
+    suggestPublish?: boolean
+    paper?: ResearchSource | null
     conversation?: {
       id: string
       mode: ChatMode
@@ -98,6 +100,8 @@ export type Message = {
   role: MessageRole
   content: string
   createdAt: string
+  sources?: ResearchSource[]
+  researchDirections?: ResearchDirection[]
 }
 
 export type ResearchVisibility = 'private' | 'public'

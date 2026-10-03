@@ -1,0 +1,20 @@
+/** Mirrors backend SUPPORT_PROVIDERS for payment setup UI */
+export const SUPPORT_PROVIDERS = [
+  "telebirr",
+  "cbe",
+  "cbebirr",
+  "mpesa",
+  "boa",
+  "dashen",
+  "awash",
+  "zemen",
+  "coopay",
+  "kaafi",
+  "amhara",
+  "abay",
+  "oromia",
+  "berhan",
+  "ahadu",
+  "siinqee",
+  "zamzam",
+] as const;

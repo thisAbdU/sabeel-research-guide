@@ -10,12 +10,12 @@ import {
   LayoutDashboard,
   Sparkles,
   User,
-  Moon,
   Clock,
   LogOut,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useAuth } from "@/context/AuthContext";
 import { useChat } from "@/context/ChatContext";
 import type { ChatMode, ConversationMeta } from "@/types/chat";
@@ -56,10 +56,22 @@ export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
     isLoadingList,
     listHasMore,
     loadMoreConversations,
+    startNewChat,
   } = useChat();
 
+  const goHome = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    onNavigate?.();
+    if (user) {
+      startNewChat();
+      router.push("/chat");
+      return;
+    }
+    router.push("/");
+  };
+
   const mainNav = [
-    { href: "/", label: "Home", icon: Home },
+    { href: user ? "/chat" : "/", label: "Home", icon: Home, isHome: true },
     { href: "/chat", label: "Chat Assistant", icon: MessageSquare },
     { href: "/discover", label: "Discover", icon: Compass },
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -67,7 +79,6 @@ export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
 
   const handleOpen = (session: ConversationMeta) => {
     onNavigate?.();
-    // URL only — chat page deep-link effect opens the thread (avoids A⇄B ping-pong)
     const href = `/chat?c=${session.id}`;
     if (pathname !== "/chat") {
       router.push(href);
@@ -86,8 +97,8 @@ export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
     >
       <div className="shrink-0 flex items-center justify-between px-4 py-4 border-b border-zinc-100 dark:border-zinc-800">
         <Link
-          href="/"
-          onClick={onNavigate}
+          href={user ? "/chat" : "/"}
+          onClick={goHome}
           className="flex items-center gap-2.5 transition-opacity hover:opacity-90"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-900 text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-950">
@@ -102,13 +113,7 @@ export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
             </div>
           </div>
         </Link>
-        <button
-          type="button"
-          aria-label="Toggle theme"
-          className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-        >
-          <Moon className="h-4 w-4" />
-        </button>
+        <ThemeToggle />
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
@@ -117,12 +122,24 @@ export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
             Navigation
           </div>
           {mainNav.map((item) => {
-            const isActive = pathname === item.href;
+            const isHome = "isHome" in item && item.isHome;
+            const isActive = isHome
+              ? pathname === "/chat" && !activeId
+              : item.href === "/chat"
+                ? pathname === "/chat" && !!activeId
+                : pathname === item.href;
+
             return (
               <Link
-                key={item.href}
+                key={item.label}
                 href={item.href}
-                onClick={onNavigate}
+                onClick={(e) => {
+                  if (isHome) {
+                    goHome(e);
+                    return;
+                  }
+                  onNavigate?.();
+                }}
                 className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-zinc-900 text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-950"
