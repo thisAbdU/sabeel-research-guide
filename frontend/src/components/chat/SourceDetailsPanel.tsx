@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ExternalLink, Globe, X } from "lucide-react";
+import { Bookmark, BookmarkCheck, ExternalLink, Globe, Loader2, X } from "lucide-react";
 import { ResearchSource, ChatMode } from "@/types/chat";
 
 function LinkedinIcon({ className = "h-4 w-4" }: { className?: string }) {
@@ -24,9 +24,19 @@ interface SourceDetailsPanelProps {
   source: ResearchSource | null;
   mode?: ChatMode;
   onClose: () => void;
+  isSaved?: boolean;
+  isSaving?: boolean;
+  onToggleSave?: (source: ResearchSource) => void;
 }
 
-export function SourceDetailsPanel({ source, mode = "vent", onClose }: SourceDetailsPanelProps) {
+export function SourceDetailsPanel({
+  source,
+  mode = "vent",
+  onClose,
+  isSaved = false,
+  isSaving = false,
+  onToggleSave,
+}: SourceDetailsPanelProps) {
   if (!source) {
     return (
       <div className="h-full rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 flex flex-col items-center justify-center text-center text-zinc-400 dark:text-zinc-500">
@@ -151,8 +161,25 @@ export function SourceDetailsPanel({ source, mode = "vent", onClose }: SourceDet
       </div>
 
       {/* Action Footer */}
-      {source.url && (
-        <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 shrink-0">
+      <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 shrink-0 space-y-2">
+        {isFunding && onToggleSave && (
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={() => onToggleSave(source)}
+            className="flex items-center justify-center gap-2 w-full h-9 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-900 text-xs font-medium transition-colors dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50 cursor-pointer"
+          >
+            {isSaving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : isSaved ? (
+              <BookmarkCheck className="h-3.5 w-3.5" />
+            ) : (
+              <Bookmark className="h-3.5 w-3.5" />
+            )}
+            <span>{isSaved ? "Saved — remove bookmark" : "Save funder"}</span>
+          </button>
+        )}
+        {source.url && (
           <a
             href={source.url}
             target="_blank"
@@ -162,8 +189,8 @@ export function SourceDetailsPanel({ source, mode = "vent", onClose }: SourceDet
             <span>{isFunding ? "Visit Program Page" : "View Paper"}</span>
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

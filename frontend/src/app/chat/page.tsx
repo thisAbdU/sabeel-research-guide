@@ -27,6 +27,13 @@ import { useChat } from "@/context/ChatContext";
 import { useVoicePipeline } from "@/hooks/useVoicePipeline";
 import { LiveVoiceMode } from "@/components/chat/LiveVoiceMode";
 import { PublishOfferModal } from "@/components/chat/PublishOfferModal";
+import {
+  funderKey,
+  listFundingMatches,
+  removeFundingMatch,
+  saveFundingMatch,
+  type FundingMatch,
+} from "@/services/funding";
 
 function ChatPageInner() {
   const router = useRouter();
@@ -54,12 +61,102 @@ function ChatPageInner() {
   } = useChat();
 
   const [publishOpen, setPublishOpen] = React.useState(false);
+  const [savedMatches, setSavedMatches] = React.useState<FundingMatch[]>([]);
+  const [savingKeys, setSavingKeys] = React.useState<Set<string>>(() => new Set());
 
   React.useEffect(() => {
     if (suggestPublish && currentMode === "funding") {
       setPublishOpen(true);
     }
   }, [suggestPublish, currentMode]);
+
+  React.useEffect(() => {
+    if (!user || currentMode !== "funding" || !activeId || activeId.startsWith("temp-")) {
+      setSavedMatches([]);
+      return;
+    }
+    let cancelled = false;
+    void listFundingMatches({ conversationId: activeId })
+      .then((res) => {
+        if (!cancelled) setSavedMatches(res.matches ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setSavedMatches([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, currentMode, activeId]);
+
+  const savedKeySet = React.useMemo(() => {
+    const keys = new Set<string>();
+    for (const match of savedMatches) {
+      keys.add(
+        funderKey({
+          organizationName: match.organizationName,
+          url: match.url,
+        })
+      );
+    }
+    return keys;
+  }, [savedMatches]);
+
+  const isFunderSaved = React.useCallback(
+    (source: ResearchSource) => savedKeySet.has(funderKey(source)),
+    [savedKeySet]
+  );
+
+  const isFunderSaving = React.useCallback(
+    (source: ResearchSource) => savingKeys.has(funderKey(source)),
+    [savingKeys]
+  );
+
+  const toggleSaveFunder = React.useCallback(
+    async (source: ResearchSource) => {
+      if (!activeId || activeId.startsWith("temp-")) {
+        setErrorBanner("Send a message first, then save funders from this conversation.");
+        return;
+      }
+      const key = funderKey(source);
+      if (savingKeys.has(key)) return;
+
+      setSavingKeys((prev) => new Set(prev).add(key));
+      setErrorBanner(null);
+      try {
+        const existing = savedMatches.find(
+          (m) =>
+            funderKey({
+              organizationName: m.organizationName,
+              url: m.url,
+            }) === key
+        );
+        if (existing) {
+          await removeFundingMatch(existing.id);
+          setSavedMatches((prev) => prev.filter((m) => m.id !== existing.id));
+        } else {
+          const res = await saveFundingMatch({
+            conversationId: activeId,
+            source,
+          });
+          setSavedMatches((prev) => {
+            if (prev.some((m) => m.id === res.match.id)) return prev;
+            return [res.match, ...prev];
+          });
+        }
+      } catch (err) {
+        setErrorBanner(
+          err instanceof Error ? err.message : "Could not update saved funder"
+        );
+      } finally {
+        setSavingKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [activeId, savedMatches, savingKeys, setErrorBanner]
+  );
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const openedFromQuery = React.useRef<string | null>(null);
@@ -294,6 +391,11 @@ function ChatPageInner() {
                       message={msg}
                       onSelectSource={setSelectedSource}
                       selectedSourceId={selectedSource?.id}
+                      isFunderSaved={isFunderSaved}
+                      isFunderSaving={isFunderSaving}
+                      onToggleSaveFunder={(source) => {
+                        void toggleSaveFunder(source);
+                      }}
                     />
                   ))}
                   {isSending && (
@@ -337,6 +439,11 @@ function ChatPageInner() {
                 source={selectedSource}
                 mode={currentMode}
                 onClose={() => setSelectedSource(null)}
+                isSaved={selectedSource ? isFunderSaved(selectedSource) : false}
+                isSaving={selectedSource ? isFunderSaving(selectedSource) : false}
+                onToggleSave={(source) => {
+                  void toggleSaveFunder(source);
+                }}
               />
             </div>
           ) : (
@@ -406,6 +513,11 @@ function ChatPageInner() {
                 source={selectedSource}
                 mode={currentMode}
                 onClose={() => setSelectedSource(null)}
+                isSaved={isFunderSaved(selectedSource)}
+                isSaving={isFunderSaving(selectedSource)}
+                onToggleSave={(source) => {
+                  void toggleSaveFunder(source);
+                }}
               />
             </div>
           </div>

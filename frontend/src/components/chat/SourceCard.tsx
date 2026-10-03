@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ExternalLink } from "lucide-react";
+import { Bookmark, BookmarkCheck, ExternalLink, Loader2 } from "lucide-react";
 import { ResearchSource } from "@/types/chat";
 
 export interface SourceCardProps {
@@ -10,6 +10,9 @@ export interface SourceCardProps {
   variant?: "paper" | "funding";
   isSelected?: boolean;
   onSelect?: (source: ResearchSource) => void;
+  isSaved?: boolean;
+  isSaving?: boolean;
+  onToggleSave?: (source: ResearchSource) => void;
 }
 
 export function SourceCard({
@@ -18,6 +21,9 @@ export function SourceCard({
   variant = "paper",
   isSelected = false,
   onSelect,
+  isSaved = false,
+  isSaving = false,
+  onToggleSave,
 }: SourceCardProps) {
   const isFunding = variant === "funding" || source.source === "Exa" || !!source.whyMatch;
 
@@ -41,9 +47,32 @@ export function SourceCard({
           <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
             {isFunding ? "Potential Funder" : source.source || "ScholarXiv"}
           </span>
-          {source.year && (
-            <span className="font-mono text-[10px] text-zinc-400">{source.year}</span>
-          )}
+          <div className="flex items-center gap-1">
+            {source.year && (
+              <span className="font-mono text-[10px] text-zinc-400">{source.year}</span>
+            )}
+            {isFunding && onToggleSave && (
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleSave(source);
+                }}
+                title={isSaved ? "Remove saved funder" : "Save funder"}
+                aria-label={isSaved ? "Remove saved funder" : "Save funder"}
+                className="p-1 rounded text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : isSaved ? (
+                  <BookmarkCheck className="h-3.5 w-3.5 text-zinc-900 dark:text-zinc-100" />
+                ) : (
+                  <Bookmark className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
+          </div>
         </div>
 
         <h4 className="mt-1.5 text-xs font-semibold text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2 group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">

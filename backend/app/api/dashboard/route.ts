@@ -1,6 +1,6 @@
 import { requireUser } from '@/lib/auth'
 import { error, json, options } from '@/lib/http'
-import { toResearchProject } from '@/lib/mappers'
+import { toFundingMatch, toResearchProject } from '@/lib/mappers'
 import { readSupportEnabled, RESEARCH_COLUMNS } from '@/lib/research'
 
 export function OPTIONS() {
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 
   const [
     { data: projects, error: projectsError },
-    { count: fundingCount, error: fundingError },
+    { data: fundingRows, error: fundingError },
     { data: tipRows, error: tipsError },
   ] = await Promise.all([
     auth.supabase
@@ -25,8 +25,9 @@ export async function GET(request: Request) {
       .order('updated_at', { ascending: false }),
     auth.supabase
       .from('funding_matches')
-      .select('id, research_projects!inner(user_id)', { count: 'exact', head: true })
-      .eq('research_projects.user_id', userId),
+      .select('*, research_projects!inner(user_id, title)')
+      .eq('research_projects.user_id', userId)
+      .order('created_at', { ascending: false }),
     auth.supabase
       .from('support_transactions')
       .select('amount, currency, status, research_projects!inner(user_id)')
@@ -43,19 +44,27 @@ export async function GET(request: Request) {
   const drafts = list.filter((row) => !row.is_published)
   const tipsTotal = (tipRows ?? []).reduce((sum, row) => sum + Number(row.amount || 0), 0)
   const tipsCurrency = (tipRows ?? [])[0]?.currency?.toUpperCase() || 'ETB'
+  const fundingMatches = (fundingRows ?? []).map((row) => {
+    const project = row.research_projects as { title?: string } | null
+    return {
+      ...toFundingMatch(row),
+      researchTitle: project?.title ?? null,
+    }
+  })
 
   return json({
     data: {
       stats: {
         publishedWorks: published.length,
         draftIdeas: drafts.length,
-        fundingMatches: fundingCount ?? 0,
+        fundingMatches: fundingMatches.length,
         tipsReceived: tipsTotal,
         tipsCurrency,
       },
       research: list.map((row) =>
         toResearchProject(row, readSupportEnabled(row.support_settings)),
       ),
+      fundingMatches,
     },
   })
 }

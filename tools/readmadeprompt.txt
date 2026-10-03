@@ -524,3 +524,120 @@ backend/app/api/voice/route.ts                     |   5 +-
  tools/readmadeprompt.txt                           |  48 +++
  18 files changed, 1170 insertions(+), 330 deletions(-)
 ```
+
+
+################################################################################
+# 2026-10-03 17:59:02
+################################################################################
+
+You are writing a daily product changelog from git history.
+
+Current version: v1.7
+Repo: sabeel-research-guide
+
+Produce exactly three artifacts, in this order, nothing else:
+
+1) Version Tag
+   - Semver tag for this release (bump from current version).
+   - One line, e.g. v1.1
+
+2) Update Title
+   - One short public-facing title for this day's changes.
+
+3) changelog.md
+   - Markdown body only (no extra wrapping).
+   - User-facing: what changed, why it matters.
+   - Group as Added / Changed / Fixed when it fits.
+   - Skip noise (lockfiles, formatting-only, generated files) unless it changes behavior.
+
+Commit messages since last changelog:
+```
+82ed7d7 feat: discover page flow. light mode/ dark mode. publish flow
+67a3bea persist chat history
+c3f76ff feat: persist history
+11119b4 feat:changelog
+0618e23 changelog
+d96a6b1 feat: voxide live interaction ui and integration
+```
+
+Files changed (status + line counts). Use this instead of patches:
+```
+M	backend/app/api/chat/route.ts
+A	backend/app/api/dashboard/route.ts
+A	backend/app/api/research/from-link/route.ts
+M	backend/app/api/research/route.ts
+M	backend/lib/ai/complete.ts
+M	backend/lib/ai/funding.ts
+M	backend/lib/mappers.ts
+A	backend/lib/research-fields.ts
+M	backend/lib/types.ts
+M	frontend/src/app/chat/page.tsx
+M	frontend/src/app/dashboard/page.tsx
+M	frontend/src/app/discover/page.tsx
+M	frontend/src/app/globals.css
+M	frontend/src/app/layout.tsx
+M	frontend/src/app/page.tsx
+M	frontend/src/components/chat/ChatInput.tsx
+A	frontend/src/components/chat/LiveVoiceMode.tsx
+A	frontend/src/components/chat/LiveVoiceOrb.tsx
+A	frontend/src/components/chat/PublishOfferModal.tsx
+A	frontend/src/components/chat/VoiceControls.tsx
+A	frontend/src/components/chat/VoiceStatusBar.tsx
+A	frontend/src/components/chat/VoiceVisualizer.tsx
+A	frontend/src/components/discover/SupportModal.tsx
+M	frontend/src/components/layout/AppShell.tsx
+M	frontend/src/components/layout/Navbar.tsx
+M	frontend/src/components/layout/Sidebar.tsx
+A	frontend/src/components/ui/ThemeToggle.tsx
+A	frontend/src/context/ChatContext.tsx
+A	frontend/src/context/ThemeContext.tsx
+M	frontend/src/hooks/useVoicePipeline.ts
+A	frontend/src/lib/discover-fields.ts
+A	frontend/src/lib/support-providers.ts
+M	frontend/src/services/chat.ts
+M	frontend/src/types/chat.ts
+A	supabase/migrations/0005_chat_list_optimization.sql
+A	supabase/migrations/0006_message_sources.sql
+M	tools/.changelog_state
+M	tools/readmadeprompt.txt
+
+backend/app/api/chat/route.ts                      | 132 +++++-
+ backend/app/api/dashboard/route.ts                 |  61 +++
+ backend/app/api/research/from-link/route.ts        | 245 +++++++++++
+ backend/app/api/research/route.ts                  |   7 +-
+ backend/lib/ai/complete.ts                         |  30 +-
+ backend/lib/ai/funding.ts                          | 138 ++++--
+ backend/lib/mappers.ts                             |  13 +
+ backend/lib/research-fields.ts                     | 141 ++++++
+ backend/lib/types.ts                               |  20 +
+ frontend/src/app/chat/page.tsx                     | 289 ++++++------
+ frontend/src/app/dashboard/page.tsx                | 309 ++++++++-----
+ frontend/src/app/discover/page.tsx                 |  31 +-
+ frontend/src/app/globals.css                       |  46 +-
+ frontend/src/app/layout.tsx                        |  16 +-
+ frontend/src/app/page.tsx                          |  45 +-
+ frontend/src/components/chat/ChatInput.tsx         |  25 +-
+ frontend/src/components/chat/LiveVoiceMode.tsx     | 237 ++++++++++
+ frontend/src/components/chat/LiveVoiceOrb.tsx      | 184 ++++++++
+ frontend/src/components/chat/PublishOfferModal.tsx | 278 ++++++++++++
+ frontend/src/components/chat/VoiceControls.tsx     |  66 +++
+ frontend/src/components/chat/VoiceStatusBar.tsx    | 152 +++++++
+ frontend/src/components/chat/VoiceVisualizer.tsx   | 120 +++++
+ frontend/src/components/discover/SupportModal.tsx  | 252 +++++++++++
+ frontend/src/components/layout/AppShell.tsx        |  41 +-
+ frontend/src/components/layout/Navbar.tsx          |  50 ++-
+ frontend/src/components/layout/Sidebar.tsx         | 208 ++++++---
+ frontend/src/components/ui/ThemeToggle.tsx         |  42 ++
+ frontend/src/context/ChatContext.tsx               | 489 +++++++++++++++++++++
+ frontend/src/context/ThemeContext.tsx              | 113 +++++
+ frontend/src/hooks/useVoicePipeline.ts             |  53 ++-
+ frontend/src/lib/discover-fields.ts                |  10 +
+ frontend/src/lib/support-providers.ts              |  20 +
+ frontend/src/services/chat.ts                      | 153 +++++--
+ frontend/src/types/chat.ts                         |  48 ++
+ .../migrations/0005_chat_list_optimization.sql     |  29 ++
+ supabase/migrations/0006_message_sources.sql       |   4 +
+ tools/.changelog_state                             |   4 +-
+ tools/readmadeprompt.txt                           |  75 ++++
+ 38 files changed, 3695 insertions(+), 481 deletions(-)
+```

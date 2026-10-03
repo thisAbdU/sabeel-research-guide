@@ -126,6 +126,7 @@ export type ResearchProject = {
 export type FundingMatch = {
   id: string
   researchProjectId: string
+  researchTitle?: string | null
   organizationName: string
   programName: string | null
   description: string | null

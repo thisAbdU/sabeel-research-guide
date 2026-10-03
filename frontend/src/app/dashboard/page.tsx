@@ -11,12 +11,15 @@ import {
   Lock,
   Sparkles,
   Loader2,
+  ExternalLink,
+  Trash2,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { removeFundingMatch, type FundingMatch } from "@/services/funding";
 
 type DashboardResearch = {
   id: string;
@@ -37,6 +40,7 @@ type DashboardResponse = {
       tipsCurrency: string;
     };
     research: DashboardResearch[];
+    fundingMatches?: FundingMatch[];
   };
 };
 
@@ -67,6 +71,7 @@ export default function DashboardPage() {
     tipsCurrency: "ETB",
   });
   const [research, setResearch] = React.useState<DashboardResearch[]>([]);
+  const [fundingMatches, setFundingMatches] = React.useState<FundingMatch[]>([]);
   const [actionBusy, setActionBusy] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
@@ -76,6 +81,7 @@ export default function DashboardPage() {
       const res = await apiFetch<DashboardResponse>("/api/dashboard");
       setStats(res.data.stats);
       setResearch(res.data.research ?? []);
+      setFundingMatches(res.data.fundingMatches ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
@@ -117,6 +123,22 @@ export default function DashboardPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Publish failed — configure payment details first");
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
+  const removeMatch = async (id: string) => {
+    setActionBusy(id);
+    try {
+      await removeFundingMatch(id);
+      setFundingMatches((prev) => prev.filter((m) => m.id !== id));
+      setStats((prev) => ({
+        ...prev,
+        fundingMatches: Math.max(0, prev.fundingMatches - 1),
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove saved funder");
     } finally {
       setActionBusy(null);
     }
@@ -340,17 +362,99 @@ export default function DashboardPage() {
         )}
 
         {activeTab === "funding" && (
-          <Card className="p-6 text-center space-y-2">
-            <Coins className="h-8 w-8 text-zinc-600 dark:text-zinc-400 mx-auto" />
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-              Saved Funding Opportunities
-            </h2>
-            <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-              {stats.fundingMatches > 0
-                ? `You have ${stats.fundingMatches} saved funding match${stats.fundingMatches === 1 ? "" : "es"}.`
-                : "Run a session in Get Funding mode to match your research with foundations, programs, and grants."}
-            </p>
-          </Card>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">
+                  Saved Funder Matches
+                </h2>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Bookmarks from Get Funding sessions.
+                </p>
+              </div>
+              <Link href="/chat">
+                <Button variant="outline" size="sm" className="rounded-lg">
+                  Find more funders
+                </Button>
+              </Link>
+            </div>
+
+            {loading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+              </div>
+            ) : fundingMatches.length === 0 ? (
+              <Card className="p-8 text-center space-y-2">
+                <Coins className="h-8 w-8 text-zinc-600 dark:text-zinc-400 mx-auto" />
+                <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                  No saved funders yet
+                </h3>
+                <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                  Run Get Funding, open a funder card, and tap the bookmark to save it here.
+                </p>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {fundingMatches.map((match) => (
+                  <div
+                    key={match.id}
+                    className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <div className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">
+                        {match.organizationName}
+                      </div>
+                      {match.programName && (
+                        <div className="text-xs text-zinc-600 dark:text-zinc-400">
+                          {match.programName}
+                        </div>
+                      )}
+                      {match.relevanceNote && (
+                        <p className="text-xs text-zinc-500 line-clamp-2">
+                          {match.relevanceNote}
+                        </p>
+                      )}
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
+                        {match.researchTitle && (
+                          <span className="truncate max-w-[220px]">
+                            For: {match.researchTitle}
+                          </span>
+                        )}
+                        <span>Saved {relativeTime(match.createdAt)}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {match.url && (
+                        <a
+                          href={match.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Button variant="outline" size="sm" className="rounded-lg gap-1.5 text-xs">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Open
+                          </Button>
+                        </a>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-lg text-xs text-red-600 dark:text-red-400"
+                        disabled={actionBusy === match.id}
+                        onClick={() => void removeMatch(match.id)}
+                      >
+                        {actionBusy === match.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </AppShell>

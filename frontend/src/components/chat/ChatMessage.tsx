@@ -11,6 +11,9 @@ interface ChatMessageProps {
   message: ChatMessageItem;
   onSelectSource?: (source: ResearchSource) => void;
   selectedSourceId?: string | null;
+  isFunderSaved?: (source: ResearchSource) => boolean;
+  isFunderSaving?: (source: ResearchSource) => boolean;
+  onToggleSaveFunder?: (source: ResearchSource) => void;
 }
 
 function renderFormattedInline(text: string): React.ReactNode {
@@ -131,6 +134,9 @@ export function ChatMessage({
   message,
   onSelectSource,
   selectedSourceId,
+  isFunderSaved,
+  isFunderSaving,
+  onToggleSaveFunder,
 }: ChatMessageProps) {
   const [copied, setCopied] = React.useState(false);
   const isUser = message.role === "user";
@@ -281,6 +287,11 @@ export function ChatMessage({
                   variant={message.mode === "funding" ? "funding" : "paper"}
                   isSelected={selectedSourceId === source.id}
                   onSelect={onSelectSource}
+                  isSaved={isFunderSaved?.(source)}
+                  isSaving={isFunderSaving?.(source)}
+                  onToggleSave={
+                    message.mode === "funding" ? onToggleSaveFunder : undefined
+                  }
                 />
               ))}
             </div>
