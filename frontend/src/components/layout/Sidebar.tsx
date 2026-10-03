@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
   MessageSquare,
@@ -13,18 +13,50 @@ import {
   Moon,
   Clock,
   LogOut,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/context/AuthContext";
+import { useChat } from "@/context/ChatContext";
+import type { ChatMode, ConversationMeta } from "@/types/chat";
 
 interface SidebarProps {
   onNavigate?: () => void;
   isMobile?: boolean;
 }
 
+function relativeTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function modeLabel(mode: ChatMode): string {
+  if (mode === "funding") return "Funding";
+  return mode.charAt(0).toUpperCase() + mode.slice(1);
+}
+
 export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, displayName, signOut } = useAuth();
+  const {
+    conversations,
+    activeId,
+    isLoadingList,
+    listHasMore,
+    loadMoreConversations,
+  } = useChat();
 
   const mainNav = [
     { href: "/", label: "Home", icon: Home },
@@ -33,32 +65,16 @@ export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   ];
 
-  const recentHistory = [
-    {
-      id: "h1",
-      title: "AI in Higher Education",
-      mode: "Vent",
-      time: "Just now",
-    },
-    {
-      id: "h2",
-      title: "Social Media on Students",
-      mode: "Roast",
-      time: "Yesterday",
-    },
-    {
-      id: "h3",
-      title: "IoT Irrigation Grant Call",
-      mode: "Funding",
-      time: "2 days ago",
-    },
-    {
-      id: "h4",
-      title: "Telehealth Protocol Study",
-      mode: "Vent",
-      time: "Sep 20",
-    },
-  ];
+  const handleOpen = (session: ConversationMeta) => {
+    onNavigate?.();
+    // URL only — chat page deep-link effect opens the thread (avoids A⇄B ping-pong)
+    const href = `/chat?c=${session.id}`;
+    if (pathname !== "/chat") {
+      router.push(href);
+      return;
+    }
+    router.replace(href, { scroll: false });
+  };
 
   return (
     <aside
@@ -68,7 +84,6 @@ export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
           : "hidden lg:flex w-64 shrink-0 h-screen sticky top-0"
       }`}
     >
-      {/* 1. Sticky Logo Header (Non-scrolling) */}
       <div className="shrink-0 flex items-center justify-between px-4 py-4 border-b border-zinc-100 dark:border-zinc-800">
         <Link
           href="/"
@@ -96,9 +111,7 @@ export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
         </button>
       </div>
 
-      {/* 2. Scrollable Middle Area (Navigation + Recent History) */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-        {/* Main Navigation */}
         <div className="space-y-1">
           <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
             Navigation
@@ -129,38 +142,70 @@ export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
           })}
         </div>
 
-        {/* Recent History Section */}
         <div className="space-y-1">
           <div className="flex items-center justify-between px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
             <span>Recent History</span>
             <Clock className="h-3 w-3 text-zinc-400" />
           </div>
           <div className="space-y-0.5">
-            {recentHistory.map((session) => (
-              <Link
-                key={session.id}
-                href="/chat"
-                onClick={onNavigate}
-                className="group flex flex-col rounded-lg px-2.5 py-2 text-xs transition-colors hover:bg-zinc-100/80 dark:hover:bg-zinc-900"
+            {!user ? (
+              <p className="px-2.5 py-2 text-[11px] text-zinc-400">
+                Sign in to see your chats.
+              </p>
+            ) : isLoadingList && conversations.length === 0 ? (
+              <div className="flex items-center gap-2 px-2.5 py-3 text-zinc-400">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="text-[11px]">Loading…</span>
+              </div>
+            ) : conversations.length === 0 ? (
+              <p className="px-2.5 py-2 text-[11px] text-zinc-400">
+                No conversations yet.
+              </p>
+            ) : (
+              conversations.map((session) => {
+                const isActive = activeId === session.id && pathname === "/chat";
+                return (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => handleOpen(session)}
+                    className={`group w-full flex flex-col rounded-lg px-2.5 py-2 text-xs text-left transition-colors ${
+                      isActive
+                        ? "bg-zinc-100 dark:bg-zinc-800"
+                        : "hover:bg-zinc-100/80 dark:hover:bg-zinc-900"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="font-medium text-zinc-700 dark:text-zinc-300 truncate group-hover:text-zinc-950 dark:group-hover:text-white">
+                        {session.title || "Untitled chat"}
+                      </span>
+                      <span className="text-[10px] text-zinc-400 shrink-0 font-mono">
+                        {modeLabel(session.mode)}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-zinc-400 truncate mt-0.5">
+                      {relativeTime(session.updatedAt)}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+            {user && listHasMore && (
+              <button
+                type="button"
+                onClick={() => {
+                  void loadMoreConversations();
+                }}
+                disabled={isLoadingList}
+                className="w-full px-2.5 py-2 text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 disabled:opacity-50"
               >
-                <div className="flex items-center justify-between gap-1.5">
-                  <span className="font-medium text-zinc-700 dark:text-zinc-300 truncate group-hover:text-zinc-950 dark:group-hover:text-white">
-                    {session.title}
-                  </span>
-                  <span className="text-[10px] text-zinc-400 shrink-0 font-mono">
-                    {session.mode}
-                  </span>
-                </div>
-                <span className="text-[10px] text-zinc-400 truncate mt-0.5">
-                  {session.time}
-                </span>
-              </Link>
-            ))}
+                {isLoadingList ? "Loading…" : "Load more"}
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 3. Sticky User Profile Footer (Non-scrolling) */}
       <div className="shrink-0 p-3 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30">
         <div className="rounded-xl border border-zinc-200/90 bg-white p-2.5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between gap-1.5">
@@ -169,10 +214,16 @@ export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
                 <User className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[95px]" title={user ? displayName : "Guest"}>
+                <div
+                  className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[95px]"
+                  title={user ? displayName : "Guest"}
+                >
                   {user ? displayName : "Guest"}
                 </div>
-                <div className="text-[10px] text-zinc-400 truncate max-w-[95px]" title={user?.email || "Not signed in"}>
+                <div
+                  className="text-[10px] text-zinc-400 truncate max-w-[95px]"
+                  title={user?.email || "Not signed in"}
+                >
                   {user ? (user.email ?? "Researcher") : "Not signed in"}
                 </div>
               </div>
@@ -189,7 +240,11 @@ export function Sidebar({ onNavigate, isMobile = false }: SidebarProps) {
               </Button>
             ) : (
               <Link href="/login" onClick={onNavigate} className="shrink-0">
-                <Button variant="outline" size="sm" className="h-7 text-[11px] px-2.5 rounded-lg">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] px-2.5 rounded-lg"
+                >
                   Sign In
                 </Button>
               </Link>

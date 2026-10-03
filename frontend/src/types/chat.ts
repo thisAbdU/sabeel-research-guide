@@ -39,8 +39,52 @@ export interface ChatResponseData {
     content: string;
     createdAt: string;
   };
+  userMessage?: {
+    id: string;
+    role: 'user';
+    content: string;
+    createdAt: string;
+  };
   sources: ResearchSource[];
   researchDirections: ResearchDirection[];
+  conversation?: {
+    id: string;
+    mode: ChatMode;
+    title?: string;
+    messageCount: number;
+    lastMessagePreview: string;
+    updatedAt: string;
+  };
+}
+
+export interface ConversationMeta {
+  id: string;
+  userId?: string;
+  researchProjectId?: string | null;
+  mode: ChatMode;
+  title: string | null;
+  messageCount: number;
+  lastMessagePreview: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationPage {
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export interface MessagePage {
+  hasMore: boolean;
+  nextBefore: string | null;
+}
+
+export interface PersistedMessage {
+  id: string;
+  conversationId: string;
+  role: MessageRole;
+  content: string;
+  createdAt: string;
 }
 
 export interface ChatMessageItem {

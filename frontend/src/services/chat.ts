@@ -1,6 +1,10 @@
 import type {
   ChatRequestPayload,
   ChatResponseData,
+  ConversationMeta,
+  ConversationPage,
+  MessagePage,
+  PersistedMessage,
 } from "@/types/chat";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
@@ -15,6 +19,102 @@ export class ChatApiError extends Error {
   }
 }
 
+async function chatFetch(path: string, init?: RequestInit): Promise<Response> {
+  const endpoint = `${API_BASE_URL}${path}`;
+  try {
+    return await fetch(endpoint, {
+      ...init,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers || {}),
+      },
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    throw new ChatApiError(
+      `Unable to reach the backend at ${endpoint}. ${detail}`,
+      503
+    );
+  }
+}
+
+async function readError(response: Response): Promise<string> {
+  try {
+    const errorJson = await response.json();
+    if (typeof errorJson?.error === "string") return errorJson.error;
+    if (typeof errorJson?.error?.message === "string") return errorJson.error.message;
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+export async function listConversations(options?: {
+  limit?: number;
+  cursor?: string | null;
+}): Promise<{ conversations: ConversationMeta[]; page: ConversationPage }> {
+  const params = new URLSearchParams();
+  if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.cursor) params.set("cursor", options.cursor);
+
+  const qs = params.toString();
+  const response = await chatFetch(`/api/chat${qs ? `?${qs}` : ""}`);
+
+  if (!response.ok) {
+    const msg = await readError(response);
+    if (response.status === 401) {
+      throw new ChatApiError("Your session has expired. Please sign in again.", 401);
+    }
+    throw new ChatApiError(msg || "Failed to load conversations", response.status);
+  }
+
+  const data = await response.json();
+  return {
+    conversations: (data.conversations ?? []) as ConversationMeta[],
+    page: {
+      hasMore: !!data.page?.hasMore,
+      nextCursor: data.page?.nextCursor ?? null,
+    },
+  };
+}
+
+export async function getConversation(
+  conversationId: string,
+  options?: { limit?: number; before?: string | null }
+): Promise<{
+  conversation: ConversationMeta;
+  messages: PersistedMessage[];
+  page: MessagePage;
+}> {
+  const params = new URLSearchParams({ conversationId });
+  if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.before) params.set("before", options.before);
+
+  const response = await chatFetch(`/api/chat?${params.toString()}`);
+
+  if (!response.ok) {
+    const msg = await readError(response);
+    if (response.status === 401) {
+      throw new ChatApiError("Your session has expired. Please sign in again.", 401);
+    }
+    if (response.status === 404) {
+      throw new ChatApiError("Conversation not found", 404);
+    }
+    throw new ChatApiError(msg || "Failed to load conversation", response.status);
+  }
+
+  const data = await response.json();
+  return {
+    conversation: data.conversation as ConversationMeta,
+    messages: (data.messages ?? []) as PersistedMessage[],
+    page: {
+      hasMore: !!data.page?.hasMore,
+      nextBefore: data.page?.nextBefore ?? null,
+    },
+  };
+}
+
 export async function sendChatMessage(
   payload: ChatRequestPayload,
   onStatus?: (text: string) => void
@@ -27,14 +127,10 @@ export async function sendChatMessage(
   try {
     response = await fetch(endpoint, {
       method: "POST",
-
-      // Send the backend authentication cookie
       credentials: "include",
-
       headers: {
         "Content-Type": "application/json",
       },
-
       body: JSON.stringify({
         mode: payload.mode,
         conversationId: payload.conversationId || null,
@@ -43,7 +139,12 @@ export async function sendChatMessage(
     });
   } catch (err) {
     const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-    console.error("[chat] fetch threw before any HTTP response", { endpoint, mode: payload.mode, detail, err });
+    console.error("[chat] fetch threw before any HTTP response", {
+      endpoint,
+      mode: payload.mode,
+      detail,
+      err,
+    });
     throw new ChatApiError(
       `Unable to reach the backend at ${endpoint}. ${detail}. This fires before Exa or Groq return a status — the request never completed.`,
       503
@@ -51,21 +152,7 @@ export async function sendChatMessage(
   }
 
   if (!response.ok) {
-    let errorDescription = "";
-
-    try {
-      const errorJson = await response.json();
-
-      if (typeof errorJson?.error === "string") {
-        errorDescription = errorJson.error;
-      } else if (
-        typeof errorJson?.error?.message === "string"
-      ) {
-        errorDescription = errorJson.error.message;
-      }
-    } catch {
-      // Response body was not JSON.
-    }
+    const errorDescription = await readError(response);
 
     if (response.status === 401) {
       throw new ChatApiError(
@@ -83,12 +170,10 @@ export async function sendChatMessage(
 
     console.error("[chat] HTTP error", response.status, errorDescription);
 
-    if (
-      response.status === 502 ||
-      response.status === 503
-    ) {
+    if (response.status === 502 || response.status === 503) {
       throw new ChatApiError(
-        errorDescription || "The AI companion service is currently unavailable. Please try again shortly.",
+        errorDescription ||
+          "The AI companion service is currently unavailable. Please try again shortly.",
         response.status
       );
     }
@@ -134,7 +219,10 @@ async function readChatStream(
   onStatus?: (text: string) => void
 ): Promise<{ data?: ChatResponseData; error?: string }> {
   if (!response.body) {
-    throw new ChatApiError("Received an invalid response format from the research server.", 500);
+    throw new ChatApiError(
+      "Received an invalid response format from the research server.",
+      500
+    );
   }
 
   const reader = response.body.getReader();
@@ -145,7 +233,11 @@ async function readChatStream(
   const take = (line: string) => {
     const trimmed = line.trim();
     if (!trimmed.startsWith("{")) return;
-    const message = JSON.parse(trimmed) as { status?: string; data?: ChatResponseData; error?: string };
+    const message = JSON.parse(trimmed) as {
+      status?: string;
+      data?: ChatResponseData;
+      error?: string;
+    };
     if (typeof message.status === "string" && !message.data) {
       onStatus?.(message.status);
       return;
@@ -164,7 +256,10 @@ async function readChatStream(
   if (buffer.trim()) take(buffer);
 
   if (!result) {
-    throw new ChatApiError("Received an invalid response format from the research server.", 500);
+    throw new ChatApiError(
+      "Received an invalid response format from the research server.",
+      500
+    );
   }
   return result;
 }

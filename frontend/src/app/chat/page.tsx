@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Sparkles,
   Flame,
@@ -21,35 +21,54 @@ import { SourceCard } from "@/components/chat/SourceCard";
 import { SourceDetailsPanel } from "@/components/chat/SourceDetailsPanel";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { ChatMode, ChatMessageItem, ResearchSource } from "@/types/chat";
+import { ChatMode, ResearchSource } from "@/types/chat";
 import { useAuth } from "@/context/AuthContext";
-import { sendChatMessage, ChatApiError } from "@/services/chat";
+import { useChat } from "@/context/ChatContext";
 import { useVoicePipeline } from "@/hooks/useVoicePipeline";
 import { LiveVoiceMode } from "@/components/chat/LiveVoiceMode";
 
-export default function ChatPage() {
+function ChatPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isLoading: authLoading } = useAuth();
-
-  const [currentMode, setCurrentMode] = React.useState<ChatMode>("vent");
-  const [conversationId, setConversationId] = React.useState<string | null>(null);
-  const [messages, setMessages] = React.useState<ChatMessageItem[]>([]);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [activity, setActivity] = React.useState<string | null>(null);
-  const [sessionSources, setSessionSources] = React.useState<ResearchSource[]>([]);
-  const [selectedSource, setSelectedSource] = React.useState<ResearchSource | null>(null);
-  const [errorBanner, setErrorBanner] = React.useState<string | null>(null);
+  const {
+    activeId,
+    currentMode,
+    messages,
+    sessionSources,
+    isLoadingThread,
+    isSending,
+    activity,
+    errorBanner,
+    selectedSource,
+    setCurrentMode,
+    setErrorBanner,
+    setSelectedSource,
+    openConversation,
+    startNewChat,
+    sendMessage,
+  } = useChat();
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const openedFromQuery = React.useRef<string | null>(null);
+  const prevActiveId = React.useRef<string | null>(null);
+  const conversationId = searchParams.get("c");
 
-  // Redirect unauthenticated users to /login
   React.useEffect(() => {
     if (!authLoading && !user) {
       router.replace("/login");
     }
   }, [authLoading, user, router]);
 
-  // Mode Configuration and Empty State Text
+  // URL is source of truth for switching history items
+  React.useEffect(() => {
+    if (authLoading || !user) return;
+    if (!conversationId) return;
+    if (openedFromQuery.current === conversationId) return;
+    openedFromQuery.current = conversationId;
+    void openConversation(conversationId);
+  }, [authLoading, user, conversationId, openConversation]);
+
   const modeConfigs: Record<
     ChatMode,
     {
@@ -63,7 +82,8 @@ export default function ChatPage() {
     vent: {
       title: "Vent",
       headline: "Ideation & Topic Framing",
-      emptyStateQuote: "You have an idea. Let's figure out what you're actually trying to research.",
+      emptyStateQuote:
+        "You have an idea. Let's figure out what you're actually trying to research.",
       suggestedPrompts: [
         "I want to research AI in education.",
         "I'm interested in social media and university students.",
@@ -74,7 +94,8 @@ export default function ChatPage() {
     roast: {
       title: "Roast",
       headline: "Critical Scope & Flaw Analysis",
-      emptyStateQuote: "Give me your research idea. I'll challenge it — respectfully.",
+      emptyStateQuote:
+        "Give me your research idea. I'll challenge it — respectfully.",
       suggestedPrompts: [
         "Roast my research idea.",
         "Is this research question too broad?",
@@ -85,7 +106,8 @@ export default function ChatPage() {
     funding: {
       title: "Get Funding",
       headline: "Funder Matching & Grant Discovery",
-      emptyStateQuote: "Tell me about your research and I'll help you explore potential funding opportunities.",
+      emptyStateQuote:
+        "Tell me about your research and I'll help you explore potential funding opportunities.",
       suggestedPrompts: [
         "Find potential funders for my education research.",
         "My research is about AI and healthcare in Africa.",
@@ -97,118 +119,46 @@ export default function ChatPage() {
 
   const activeConfig = modeConfigs[currentMode];
 
-  // Auto-scroll to bottom on new messages
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+  }, [messages, isSending]);
 
-  // Mode switching: resets conversation state to maintain backend consistency
   const handleModeChange = (newMode: ChatMode) => {
-    if (newMode === currentMode) return;
+    openedFromQuery.current = null;
     setCurrentMode(newMode);
-    setConversationId(null);
-    setMessages([]);
-    setSessionSources([]);
-    setSelectedSource(null);
-    setErrorBanner(null);
+    router.replace("/chat", { scroll: false });
   };
 
-  // Reset / New Session
   const handleClearChat = () => {
-    setConversationId(null);
-    setMessages([]);
-    setSessionSources([]);
-    setSelectedSource(null);
-    setErrorBanner(null);
+    openedFromQuery.current = null;
+    startNewChat();
+    router.replace("/chat", { scroll: false });
   };
 
-  // Shared text + voice path: returns assistant text for Voxide TTS when voice-driven
   const handleSendMessage = React.useCallback(
-    async (content: string): Promise<string | null> => {
-      const trimmed = content.trim();
-      if (!trimmed || isLoading) return null;
-
-      setErrorBanner(null);
-
-      const userMsg: ChatMessageItem = {
-        id: `user-${Date.now()}`,
-        role: "user",
-        content: trimmed,
-        createdAt: new Date(),
-        mode: currentMode,
-      };
-
-      setMessages((prev) => [...prev, userMsg]);
-      setActivity(null);
-      setIsLoading(true);
-
-      try {
-        const result = await sendChatMessage(
-          {
-            mode: currentMode,
-            conversationId,
-            message: trimmed,
-          },
-          (text) => setActivity(text)
-        );
-
-        if (result.conversationId) {
-          setConversationId(result.conversationId);
-        }
-
-        const assistantMsg: ChatMessageItem = {
-          id: result.message.id || `asst-${Date.now()}`,
-          role: "assistant",
-          content: result.message.content,
-          createdAt: result.message.createdAt || new Date().toISOString(),
-          mode: currentMode,
-          sources: result.sources && result.sources.length > 0 ? result.sources : undefined,
-          researchDirections:
-            result.researchDirections && result.researchDirections.length > 0
-              ? result.researchDirections
-              : undefined,
-        };
-
-        setMessages((prev) => [...prev, assistantMsg]);
-
-        if (result.sources && result.sources.length > 0) {
-          setSessionSources((prev) => {
-            const existingKeys = new Set(prev.map((s) => s.id || s.title));
-            const newSources = result.sources.filter((s) => !existingKeys.has(s.id || s.title));
-            return [...newSources, ...prev];
-          });
-        }
-
-        return result.message.content;
-      } catch (err) {
-        const errorMessage =
-          err instanceof ChatApiError
-            ? err.message
-            : "Something went wrong while processing your research request. Please try again.";
-
-        const errorMsg: ChatMessageItem = {
-          id: `err-${Date.now()}`,
-          role: "assistant",
-          content: errorMessage,
-          createdAt: new Date(),
-          mode: currentMode,
-          isError: true,
-        };
-
-        setMessages((prev) => [...prev, errorMsg]);
-        setErrorBanner(errorMessage);
-        return null;
-      } finally {
-        setActivity(null);
-        setIsLoading(false);
-      }
-    },
-    [conversationId, currentMode, isLoading]
+    async (content: string): Promise<string | null> => sendMessage(content),
+    [sendMessage]
   );
+
+  // Only write URL when a brand-new chat gets a real id (null/temp → uuid).
+  // Never overwrite ?c= while the user is switching history via the URL.
+  React.useEffect(() => {
+    const prev = prevActiveId.current;
+    prevActiveId.current = activeId;
+
+    if (!activeId || activeId.startsWith("temp-")) return;
+
+    const wasNew = !prev || prev.startsWith("temp-");
+    if (!wasNew) return;
+    if (conversationId === activeId) return;
+
+    openedFromQuery.current = activeId;
+    router.replace(`/chat?c=${activeId}`, { scroll: false });
+  }, [activeId, conversationId, router]);
 
   const voice = useVoicePipeline({
     mode: currentMode,
-    conversationId,
+    conversationId: activeId?.startsWith("temp-") ? null : activeId,
     sendThroughChat: handleSendMessage,
     userId: user?.id,
     userEmail: user?.email,
@@ -227,7 +177,6 @@ export default function ChatPage() {
   return (
     <AppShell>
       <div className="flex flex-col h-[calc(100vh-3.5rem)] max-w-7xl mx-auto w-full">
-        {/* Top Header: Title, Mode Indicator, and Session Actions */}
         <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-zinc-200/80 dark:border-zinc-800">
           <div>
             <div className="flex items-center gap-2">
@@ -245,7 +194,7 @@ export default function ChatPage() {
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
-            {messages.length > 0 && (
+            {(messages.length > 0 || activeId) && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -259,7 +208,6 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Global Error Banner (if error occurred) */}
         {errorBanner && (
           <div className="shrink-0 mt-3 flex items-center justify-between gap-2 rounded-xl border border-red-200 bg-red-50/80 px-3.5 py-2.5 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
             <div className="flex items-center gap-2 min-w-0">
@@ -276,14 +224,14 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* Workspace: Left Chat Stream + Right Grounding Panel */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden min-h-0 pt-4">
-          {/* Main Chat Stream Column */}
           <div className="lg:col-span-8 flex flex-col justify-between h-full min-h-0">
-            {/* Scrollable Message Flow Area */}
             <div className="flex-1 overflow-y-auto pr-2 space-y-6 pb-4">
-              {messages.length === 0 ? (
-                /* Mode-Specific Empty State Canvas */
+              {isLoadingThread ? (
+                <div className="flex h-40 items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+                </div>
+              ) : messages.length === 0 ? (
                 <div className="rounded-2xl border border-zinc-200/90 bg-white p-6 sm:p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/60 my-auto">
                   <div className="flex items-center gap-3">
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200">
@@ -311,8 +259,10 @@ export default function ChatPage() {
                       {activeConfig.suggestedPrompts.map((prompt, idx) => (
                         <button
                           key={idx}
-                          onClick={() => handleSendMessage(prompt)}
-                          disabled={isLoading}
+                          onClick={() => {
+                            void handleSendMessage(prompt);
+                          }}
+                          disabled={isSending}
                           className="rounded-lg border border-zinc-200/90 bg-zinc-50/80 px-3 py-2 text-xs text-zinc-700 hover:border-zinc-400 hover:bg-white text-left transition-all dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300 dark:hover:bg-zinc-800 shadow-2xs disabled:opacity-50"
                         >
                           {prompt}
@@ -322,7 +272,6 @@ export default function ChatPage() {
                   </div>
                 </div>
               ) : (
-                /* Active Message Stream */
                 <>
                   {messages.map((msg) => (
                     <ChatMessage
@@ -332,15 +281,14 @@ export default function ChatPage() {
                       selectedSourceId={selectedSource?.id}
                     />
                   ))}
-
-                  {/* Mode-Specific Typing / Loading Indicator */}
-                  {isLoading && <TypingIndicator mode={currentMode} notice={activity} />}
+                  {isSending && (
+                    <TypingIndicator mode={currentMode} notice={activity} />
+                  )}
                 </>
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Bottom Input Area with Integrated Mode Switching */}
             <div className="pt-2 pb-1 shrink-0">
               <ChatInput
                 currentMode={currentMode}
@@ -348,8 +296,8 @@ export default function ChatPage() {
                 onSendMessage={(content) => {
                   void handleSendMessage(content);
                 }}
-                disabled={isLoading}
-                isLoading={isLoading}
+                disabled={isSending || isLoadingThread}
+                isLoading={isSending}
                 voiceAvailable={voice.available}
                 voicePhase={voice.phase}
                 voiceActive={voice.isSessionOpen}
@@ -368,7 +316,6 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Right Panel: Funder Details Inspector for Funding mode, Literature Panel for Vent/Roast */}
           {currentMode === "funding" ? (
             <div className="hidden lg:flex lg:col-span-4 flex-col h-full min-h-0">
               <SourceDetailsPanel
@@ -396,11 +343,12 @@ export default function ChatPage() {
                   {sessionSources.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-zinc-200 p-6 text-center dark:border-zinc-800 text-zinc-400">
                       <p>
-                        Papers retrieved from ScholarXiv during this conversation will automatically appear here with links and summaries.
+                        Papers retrieved from ScholarXiv during this conversation
+                        will automatically appear here with links and summaries.
                       </p>
                     </div>
                   ) : (
-                    sessionSources.map((source) => (
+                    sessionSources.map((source: ResearchSource) => (
                       <SourceCard
                         key={source.id}
                         source={source}
@@ -420,7 +368,8 @@ export default function ChatPage() {
                       Publish & Support Pipeline
                     </div>
                     <p className="text-zinc-500 dark:text-zinc-400 mt-0.5">
-                      After funding analysis, you can choose to make your research publicly discoverable and enable Buy Me a Coffee tips.
+                      After funding analysis, you can choose to make your research
+                      publicly discoverable and enable Buy Me a Coffee tips.
                     </p>
                   </div>
                 </div>
@@ -429,7 +378,6 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* Mobile Details Modal / Drawer (Funding mode only) */}
         {currentMode === "funding" && selectedSource && (
           <div
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-xs lg:hidden animate-fadeIn"
@@ -448,7 +396,6 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* Live Voice Conversation Overlay (ChatGPT-style experience) */}
         {voice.isSessionOpen && (
           <LiveVoiceMode
             phase={voice.phase}
@@ -466,5 +413,21 @@ export default function ChatPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <AppShell>
+          <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+          </div>
+        </AppShell>
+      }
+    >
+      <ChatPageInner />
+    </React.Suspense>
   );
 }
