@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useVoxideVoice, type VoxideStatus } from "@voxide/react";
-import { getVoxideClient } from "@/lib/voxide";
+import { getVoxideClient, fetchVoxideClient } from "@/lib/voxide";
 import type { ChatMode } from "@/types/chat";
 
 /** Person 1 UI states — mapped from verified Voxide statuses only. */
@@ -47,8 +47,22 @@ export function useVoicePipeline(options: {
   userId?: string;
   userEmail?: string;
 }) {
-  const client = React.useMemo(() => getVoxideClient(), []);
+  const [client, setClient] = React.useState<ReturnType<typeof getVoxideClient>>(() => getVoxideClient());
   const voice = useVoxideVoice(client);
+
+  React.useEffect(() => {
+    if (!client) {
+      let cancelled = false;
+      void fetchVoxideClient().then((resolved) => {
+        if (!cancelled && resolved) {
+          setClient(resolved);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [client]);
 
   const sendRef = React.useRef(options.sendThroughChat);
   sendRef.current = options.sendThroughChat;
@@ -59,37 +73,87 @@ export function useVoicePipeline(options: {
   const conversationIdRef = React.useRef(options.conversationId);
   conversationIdRef.current = options.conversationId;
 
+  const [liveTranscript, setLiveTranscript] = React.useState<string>("");
+
   React.useEffect(() => {
     if (!client) return;
 
     let cancelled = false;
-    client.init().catch((err: unknown) => {
-      if (!cancelled) console.error("[voxide] init failed", err);
+
+    // 1. Enable Multilingual Adaptive mode
+    client.enableMultilingual({
+      mode: "adaptive",
+      supported: ["en", "am", "om"],
     });
 
+    // 2. Register askResearchCompanion BEFORE init with global scope
     client.register({
       askResearchCompanion: {
         description:
-          "Send the user's research message to the ScholarXiv research companion and return its reply. Use this for Vent (ideation), Roast (critical feedback), or Get Funding (funder matching). Always call this instead of inventing research advice yourself.",
+          "CRITICAL: Always use this tool for EVERY question, topic, statement, or comment from the user in ANY language (Amharic, Afan Oromo, English, etc). Send the user's message to the ScholarXiv pair-researcher backend. When this tool returns { ok: true, reply }, you MUST speak the exact 'reply' text back to the user verbatim in the exact same language (if the reply is in Amharic, speak Amharic; do not translate to English).",
         params: {
           message: {
             type: "string",
             required: true,
-            description: "The user's research question or statement as text",
+            description: "The user's spoken words or query exactly as transcribed in their spoken language.",
           },
         },
-        scope: "/chat",
+        scope: "global",
         handler: async (args: Record<string, unknown>) => {
           const text = String(args.message ?? "").trim();
           if (!text) return { ok: false, error: "Empty message" };
 
+          setLiveTranscript("");
           const reply = await sendRef.current(text);
           if (!reply) return { ok: false, error: "Research companion returned no reply" };
 
           // Returned fields are spoken by Voxide after the tool call.
-          return { ok: true, reply };
+          // Strip markdown links, formatting symbols, and URLs so TTS pronounces naturally
+          const spokenReply = reply
+            .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1") // [Title](url) -> Title
+            .replace(/[*#_`~]/g, "") // remove formatting symbols
+            .replace(/https?:\/\/[^\s\)]+/g, "") // remove bare URLs
+            .replace(/\s+/g, " ") // normalize whitespace
+            .trim();
+
+          return { ok: true, reply: spokenReply };
         },
       },
+    });
+
+    // 3. Explicitly upload manifest so Voxide server registers the action immediately
+    try {
+      const actions =
+        typeof client._getManifestActions === "function"
+          ? client._getManifestActions()
+          : Array.from(client.actions?.values?.() || []).map((a: any) => ({
+              name: a.name,
+              description: a.description,
+              params: a.params,
+              scope: a.scope,
+              dangerous: a.dangerous,
+            }));
+
+      void fetch(`${client.baseUrl}/api/sdk/manifest`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${client.publicKey}`,
+        },
+        body: JSON.stringify({
+          actions,
+          stateSchema: [],
+        }),
+      }).catch((err) => {
+        if (!cancelled) console.warn("[voxide] manifest sync error:", err);
+      });
+    } catch (err) {
+      console.warn("[voxide] manifest extract error:", err);
+    }
+
+    // 4. Initialize client
+    client.init().catch((err: unknown) => {
+      if (!cancelled) console.error("[voxide] init failed", err);
     });
 
     client.setActiveRoute("/chat");
@@ -99,8 +163,31 @@ export function useVoicePipeline(options: {
       conversationId: conversationIdRef.current,
     }));
 
+    // 5. Track live transcripts during spoken interaction
+    const unsubTranscript = client.on(
+      "transcript",
+      (msg: { role?: string; text?: string; partial?: boolean }) => {
+        if (msg?.role === "user" && msg.text) {
+          setLiveTranscript(msg.text);
+        }
+      }
+    );
+
+    const unsubMsg = client.on(
+      "message",
+      (msg: { role?: string; text?: string }) => {
+        if (msg?.role === "user" && msg.text) {
+          setLiveTranscript(msg.text);
+        } else if (msg?.role === "ai") {
+          setLiveTranscript("");
+        }
+      }
+    );
+
     return () => {
       cancelled = true;
+      unsubTranscript?.();
+      unsubMsg?.();
       client.unregister("askResearchCompanion");
     };
   }, [client]);
@@ -167,6 +254,7 @@ export function useVoicePipeline(options: {
     available: Boolean(client),
     status: voice.status,
     phase,
+    liveTranscript,
     currentAction: voice.currentAction,
     errorCode: voice.errorCode,
     isSessionOpen,

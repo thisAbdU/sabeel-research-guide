@@ -1,8 +1,20 @@
 import { requireUser } from '@/lib/auth'
-import { error, options } from '@/lib/http'
+import { json, error, options } from '@/lib/http'
+import { voxideEnv } from '@/lib/env'
 
 export function OPTIONS() {
   return options()
+}
+
+export async function GET(request: Request) {
+  const auth = await requireUser(request)
+  if (!auth.ok) return auth.response
+
+  const { publicKey } = voxideEnv()
+  return json({
+    configured: Boolean(publicKey && publicKey.startsWith('vox_pub_')),
+    publicKey: publicKey || null,
+  })
 }
 
 export async function POST(request: Request) {

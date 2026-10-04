@@ -4,6 +4,7 @@ import { searchScholarXiv } from '@/lib/scholarxiv'
 import { assessVentReadiness, findLastVentQuery } from '@/lib/ai/vent'
 import { prepareRoastContext, getRoastPromptEnrichment } from '@/lib/ai/roast'
 import { prepareFundingContext } from '@/lib/ai/funding'
+import { detectLanguage, translateText } from '@/lib/translate'
 import type { ChatMode, MessageRole, ResearchDirection, ResearchSource } from '@/lib/types'
 
 export type ChatTurn = {
@@ -27,6 +28,16 @@ export async function completeChat(
 ): Promise<Completion> {
   const { baseUrl, apiKey, model } = aiEnv()
 
+  // Detect user language (Amharic 'am', Afan Oromo 'om', or English 'en')
+  const userLang = detectLanguage(message)
+  let effectiveMessage = message
+
+  if (userLang !== 'en') {
+    const langLabel = userLang === 'am' ? 'Amharic' : 'Afan Oromo'
+    onStatus?.(`Translating ${langLabel} to English for research literature search`)
+    effectiveMessage = await translateText({ text: message, from: userLang, to: 'en' })
+  }
+
   let sources: ResearchSource[] = []
   let enhancedSystemPrompt = systemPromptFor(mode)
   let allowDirections = true
@@ -35,7 +46,7 @@ export async function completeChat(
 
   if (mode === 'vent') {
     const lastSearchedQuery = findLastVentQuery(history)
-    const decision = assessVentReadiness(history, message, lastSearchedQuery)
+    const decision = assessVentReadiness(history, effectiveMessage, lastSearchedQuery)
 
     if (decision.shouldSearch && decision.query) {
       try {
@@ -65,7 +76,7 @@ export async function completeChat(
       enhancedSystemPrompt += `\n\nVENT STAGE: CONVERSATIONAL CONTINUATION\nThe user is continuing the conversation without changing their core research focus.\n- Respond conversationally to their message.\n- Do NOT perform a new literature search.\n- Maintain previous context and continue developing the research plan or addressing their specific question.\n- Keep "sources": [].`
     }
   } else if (mode === 'roast') {
-    const roastContext = await prepareRoastContext(history, message)
+    const roastContext = await prepareRoastContext(history, effectiveMessage)
     sources = roastContext.sources
     enhancedSystemPrompt += getRoastPromptEnrichment(roastContext)
     if (roastContext.isEmptyTopic) {
@@ -74,7 +85,7 @@ export async function completeChat(
   } else if (mode === 'funding') {
     allowDirections = false
     try {
-      const funding = await prepareFundingContext(history, message)
+      const funding = await prepareFundingContext(history, effectiveMessage)
       sources = funding.sources
       fundingPaper = funding.paper ?? null
       suggestPublish = funding.readiness.suggestPublish
@@ -104,8 +115,12 @@ export async function completeChat(
       const paperContext = fundingPaper
         ? `grounded in the ScholarXiv preprint "${fundingPaper.title}"`
         : 'related to your research topic'
+      let initialContent = `Here are ${sources.length} potential funding organizations ${paperContext}. These are potential matches, not a guarantee of funding. Click any card below to view detailed match rationale and official contact profiles.`
+      if (userLang !== 'en') {
+        initialContent = await translateText({ text: initialContent, from: 'en', to: userLang })
+      }
       return {
-        content: `Here are ${sources.length} potential funding organizations ${paperContext}. These are potential matches, not a guarantee of funding. Click any card below to view detailed match rationale and official contact profiles.`,
+        content: initialContent,
         researchDirections: [],
         sources,
         suggestPublish: true,
@@ -132,7 +147,7 @@ export async function completeChat(
       messages: [
         { role: 'system', content: enhancedSystemPrompt },
         ...history,
-        { role: 'user', content: message },
+        { role: 'user', content: effectiveMessage },
       ],
     }),
     signal: AbortSignal.timeout(45_000),
@@ -190,12 +205,47 @@ export async function completeChat(
   if (!raw) throw new Error('AI provider returned an empty response')
 
   const parsed = parseAssistant(raw)
+  let translatedContent = parsed.content
 
   const finalDirections = allowDirections ? parsed.researchDirections : []
+  let translatedDirections = finalDirections
+
+  if (userLang !== 'en') {
+    const langLabel = userLang === 'am' ? 'Amharic' : 'Afan Oromo'
+    onStatus?.(`Translating research response to ${langLabel}`)
+    translatedContent = await translateText({ text: parsed.content, from: 'en', to: userLang })
+
+    if (finalDirections.length > 0) {
+      try {
+        // Batch all research directions into a single translation call to eliminate multi-second latency and avoid rate-limiting
+        const textToTranslate = finalDirections
+          .map((dir, i) => `[DIR_${i}_T] ${dir.title}\n[DIR_${i}_D] ${dir.description}\n[DIR_${i}_Q] ${dir.researchQuestion}`)
+          .join('\n\n')
+
+        const translatedBatch = await translateText({ text: textToTranslate, from: 'en', to: userLang })
+
+        translatedDirections = finalDirections.map((dir, i) => {
+          const titleMatch = translatedBatch.match(new RegExp(`\\[DIR_${i}_T\\]\\s*(.*?)(?=\\n\\[DIR|$)`, 's'))
+          const descMatch = translatedBatch.match(new RegExp(`\\[DIR_${i}_D\\]\\s*(.*?)(?=\\n\\[DIR|$)`, 's'))
+          const qMatch = translatedBatch.match(new RegExp(`\\[DIR_${i}_Q\\]\\s*(.*?)(?=\\n\\[DIR|$)`, 's'))
+          return {
+            ...dir,
+            title: titleMatch?.[1]?.trim() || dir.title,
+            description: descMatch?.[1]?.trim() || dir.description,
+            researchQuestion: qMatch?.[1]?.trim() || dir.researchQuestion,
+          }
+        })
+      } catch (err) {
+        console.warn('[translate] Batch directions translation failed, keeping original:', err)
+        translatedDirections = finalDirections
+      }
+    }
+  }
 
   return {
     ...parsed,
-    researchDirections: finalDirections,
+    content: translatedContent,
+    researchDirections: translatedDirections,
     sources,
     suggestPublish: mode === 'funding' ? suggestPublish : false,
     paper: mode === 'funding' ? fundingPaper : null,

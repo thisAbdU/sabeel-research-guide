@@ -26,6 +26,12 @@ function resolveErrorMessage(errorCode?: string | null): { title: string; hint: 
     };
   }
   const lower = errorCode.toLowerCase();
+  if (lower === "usage_limit" || lower.includes("usage_limit") || lower.includes("limit")) {
+    return {
+      title: "Voxide Usage Limit Reached",
+      hint: "Your Voxide project has reached its minute or session quota on the free tier. Check your project plan on the Voxide dashboard or provide a new VOXIDE_PUBLIC_KEY to continue.",
+    };
+  }
   if (
     lower.includes("denied") ||
     lower.includes("notallowed") ||

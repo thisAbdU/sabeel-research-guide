@@ -114,7 +114,7 @@ export function extractFundingQuery(text: string): string | null {
   return cleaned
 }
 
-async function resolvePaper(history: ChatTurn[], message: string): Promise<ResearchSource | null> {
+async function resolvePaper(history: ChatTurn[], message: string, shouldSearchScholarXiv = false): Promise<ResearchSource | null> {
   const corpus = [...history.map((turn) => turn.content), message].join('\n')
   const paperId = extractPaperId(message) || extractPaperId(corpus)
   if (paperId) {
@@ -125,13 +125,16 @@ async function resolvePaper(history: ChatTurn[], message: string): Promise<Resea
     }
   }
 
-  const cleanedQuery = extractFundingQuery(message)
-  if (cleanedQuery && cleanedQuery.length >= 6) {
-    try {
-      const results = await searchScholarXiv({ query: cleanedQuery, limit: 1 })
-      if (results?.[0]) return results[0]
-    } catch (err) {
-      console.warn('[funding] ScholarXiv topic search failed:', err)
+  // Only search ScholarXiv by title if an explicit quoted title was provided and search is ready
+  if (shouldSearchScholarXiv) {
+    const quotedMatch = message.match(/["'“]([^"'”]{6,})["'”]/) || corpus.match(/["'“]([^"'”]{6,})["'”]/)
+    if (quotedMatch && quotedMatch[1]) {
+      try {
+        const results = await searchScholarXiv({ query: quotedMatch[1].trim(), limit: 1 })
+        if (results?.[0]) return results[0]
+      } catch (err) {
+        console.warn('[funding] ScholarXiv topic search failed:', err)
+      }
     }
   }
   return null
@@ -139,7 +142,7 @@ async function resolvePaper(history: ChatTurn[], message: string): Promise<Resea
 
 export async function prepareFundingContext(history: ChatTurn[], message: string) {
   const readiness = assessFundingReadiness(history, message)
-  const matchedPaper = await resolvePaper(history, message)
+  const matchedPaper = await resolvePaper(history, message, readiness.shouldSearch)
 
   if (!readiness.shouldSearch) {
     const paperBlock = matchedPaper

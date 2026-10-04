@@ -33,3 +33,16 @@ export function linksEtEnv() {
   }
 }
 
+export function addisEnv() {
+  return {
+    baseUrl: (process.env.ADDIS_BASE_URL ?? 'https://api.addisassistant.com').replace(/\/$/, ''),
+    apiKey: process.env.ADDIS_API_KEY ?? '',
+  }
+}
+
+export function voxideEnv() {
+  return {
+    publicKey: (process.env.VOXIDE_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VOXIDE_PUBLIC_KEY ?? '').trim(),
+  }
+}
+

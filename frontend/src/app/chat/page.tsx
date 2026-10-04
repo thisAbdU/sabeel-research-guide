@@ -25,7 +25,7 @@ import { ChatMode, ResearchSource } from "@/types/chat";
 import { useAuth } from "@/context/AuthContext";
 import { useChat } from "@/context/ChatContext";
 import { useVoicePipeline } from "@/hooks/useVoicePipeline";
-import { LiveVoiceMode } from "@/components/chat/LiveVoiceMode";
+import { LiveVoiceOrb } from "@/components/chat/LiveVoiceOrb";
 import { PublishOfferModal } from "@/components/chat/PublishOfferModal";
 import {
   funderKey,
@@ -276,6 +276,17 @@ function ChatPageInner() {
     userEmail: user?.email,
   });
 
+  React.useEffect(() => {
+    if (!voice.isSessionOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        voice.disconnect();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [voice.isSessionOpen, voice.disconnect]);
+
   if (authLoading || !user) {
     return (
       <AppShell>
@@ -293,12 +304,25 @@ function ChatPageInner() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl dark:text-zinc-50">
-                Research Assistant
+                {voice.isSessionOpen ? (
+                  <>
+                    <span className="font-bold">ScholarXiv</span>{" "}
+                    <span className="font-normal text-zinc-600 dark:text-zinc-400">Voice</span>
+                  </>
+                ) : (
+                  "Research Assistant"
+                )}
               </h1>
               <span className="text-zinc-300 dark:text-zinc-700">·</span>
               <span className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400 font-mono">
                 {activeConfig.title} Mode
               </span>
+              {voice.isSessionOpen && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live Voice
+                </span>
+              )}
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
               {activeConfig.headline} — Voice & Literature Grounded
@@ -405,6 +429,21 @@ function ChatPageInner() {
               )}
               <div ref={messagesEndRef} />
             </div>
+
+            {voice.isSessionOpen && (
+              <div className="pt-2 pb-1 shrink-0 flex flex-col items-center animate-fadeIn">
+                <LiveVoiceOrb
+                  phase={voice.phase}
+                  getInputLevel={voice.getInputLevel}
+                  getOutputLevel={voice.getOutputLevel}
+                  transcript={voice.liveTranscript}
+                  errorCode={voice.errorCode}
+                  onRetry={() => {
+                    void voice.connect();
+                  }}
+                />
+              </div>
+            )}
 
             <div className="pt-2 pb-1 shrink-0">
               <ChatInput
@@ -521,22 +560,6 @@ function ChatPageInner() {
               />
             </div>
           </div>
-        )}
-
-        {voice.isSessionOpen && (
-          <LiveVoiceMode
-            phase={voice.phase}
-            errorCode={voice.errorCode}
-            mode={currentMode}
-            modeTitle={`${activeConfig.title} · ${activeConfig.headline}`}
-            getInputLevel={voice.getInputLevel}
-            getOutputLevel={voice.getOutputLevel}
-            onInterrupt={voice.interrupt}
-            onExit={voice.disconnect}
-            onRetry={() => {
-              void voice.connect();
-            }}
-          />
         )}
 
         <PublishOfferModal
