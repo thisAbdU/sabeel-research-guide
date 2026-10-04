@@ -8,7 +8,6 @@ import {
   Coins,
   BookOpen,
   Info,
-  RotateCcw,
   AlertCircle,
   Loader2,
   X,
@@ -19,7 +18,6 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { SourceCard } from "@/components/chat/SourceCard";
 import { SourceDetailsPanel } from "@/components/chat/SourceDetailsPanel";
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChatMode, ResearchSource } from "@/types/chat";
 import { useAuth } from "@/context/AuthContext";
@@ -241,12 +239,6 @@ function ChatPageInner() {
     router.replace("/chat", { scroll: false });
   };
 
-  const handleClearChat = () => {
-    openedFromQuery.current = null;
-    startNewChat();
-    router.replace("/chat", { scroll: false });
-  };
-
   const handleSendMessage = React.useCallback(
     async (content: string): Promise<string | null> => sendMessage(content),
     [sendMessage]
@@ -300,50 +292,6 @@ function ChatPageInner() {
   return (
     <AppShell>
       <div className="flex flex-col h-[calc(100vh-3.5rem)] max-w-7xl mx-auto w-full">
-        <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-zinc-200/80 dark:border-zinc-800">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl dark:text-zinc-50">
-                {voice.isSessionOpen ? (
-                  <>
-                    <span className="font-bold">ScholarXiv</span>{" "}
-                    <span className="font-normal text-zinc-600 dark:text-zinc-400">Voice</span>
-                  </>
-                ) : (
-                  "Research Assistant"
-                )}
-              </h1>
-              <span className="text-zinc-300 dark:text-zinc-700">·</span>
-              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400 font-mono">
-                {activeConfig.title} Mode
-              </span>
-              {voice.isSessionOpen && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live Voice
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              {activeConfig.headline} — Voice & Literature Grounded
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            {(messages.length > 0 || activeId) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClearChat}
-                className="h-8 text-xs gap-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 rounded-lg"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                <span>New Session</span>
-              </Button>
-            )}
-          </div>
-        </div>
-
         {errorBanner && (
           <div className="shrink-0 mt-3 flex items-center justify-between gap-2 rounded-xl border border-red-200 bg-red-50/80 px-3.5 py-2.5 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
             <div className="flex items-center gap-2 min-w-0">

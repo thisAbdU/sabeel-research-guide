@@ -26,7 +26,6 @@ export function LiveVoiceOrb({
   const outerGlowRef = React.useRef<HTMLDivElement>(null);
   const midAuraRef = React.useRef<HTMLDivElement>(null);
   const orbCoreRef = React.useRef<HTMLDivElement>(null);
-  const waveBarsRef = React.useRef<(HTMLSpanElement | null)[]>([]);
 
   const animFrameRef = React.useRef<number | null>(null);
   const smoothedLevelRef = React.useRef<number>(0);
@@ -79,15 +78,6 @@ export function LiveVoiceOrb({
         outerGlowRef.current.style.opacity = `${(0.2 + current * 0.6).toFixed(2)}`;
       }
 
-      // Symmetrical amplitude bars
-      const barWeights = [0.45, 0.75, 1.0, 0.75, 0.45];
-      waveBarsRef.current.forEach((bar, idx) => {
-        if (!bar) return;
-        const weight = barWeights[idx] ?? 0.6;
-        const barScale = Math.max(0.25, Math.min(1.0, 0.25 + current * 0.75 * weight));
-        bar.style.transform = `scaleY(${barScale.toFixed(3)})`;
-      });
-
       animFrameRef.current = requestAnimationFrame(updateFrame);
     };
 
@@ -103,7 +93,8 @@ export function LiveVoiceOrb({
 
   const isThinking = phase === "thinking" || phase === "processing";
   const isError = phase === "error" || Boolean(errorCode);
-  const isLimit = errorCode === "usage_limit" || (errorCode && errorCode.toLowerCase().includes("limit"));
+  const isLimit =
+    errorCode === "usage_limit" || (errorCode && errorCode.toLowerCase().includes("limit"));
 
   // Status caption
   const statusLabel = isLimit
@@ -132,74 +123,51 @@ export function LiveVoiceOrb({
             isError
               ? "bg-red-500/25 dark:bg-red-500/20"
               : isThinking
-              ? "bg-indigo-400/30 dark:bg-indigo-500/25 animate-pulse"
-              : "bg-gradient-to-tr from-sky-400/30 via-indigo-400/30 to-purple-400/30 dark:from-sky-500/20 dark:via-indigo-500/20 dark:to-purple-500/20 opacity-40"
+              ? "bg-indigo-400/35 dark:bg-indigo-500/30 animate-pulse"
+              : "bg-gradient-to-tr from-purple-600/35 via-indigo-500/30 to-blue-500/35 dark:from-purple-500/30 dark:via-indigo-500/25 dark:to-blue-500/30 opacity-60"
           }`}
         />
 
         {/* Middle acoustic aura ring */}
         <div
           ref={midAuraRef}
-          className={`absolute inset-2 rounded-full transition-all duration-300 pointer-events-none ${
+          className={`absolute inset-1.5 rounded-full transition-all duration-300 pointer-events-none ${
             isError
               ? "border border-red-400/30 bg-red-500/10"
               : isThinking
               ? "border border-indigo-400/40 bg-indigo-500/10 animate-ping [animation-duration:3s]"
-              : "border border-sky-300/40 dark:border-indigo-400/30 bg-sky-200/20 dark:bg-indigo-950/40 opacity-50"
+              : "border border-purple-400/30 dark:border-indigo-400/30 bg-purple-500/10 dark:bg-indigo-950/30 opacity-60"
           }`}
         />
 
-        {/* Central Orb: Fluid dreamy sphere matching the ChatGPT Voice inspiration */}
+        {/* Central Orb: Animated luminous glass sparkle orb */}
         <div
           ref={orbCoreRef}
-          className={`relative flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 rounded-full shadow-xl transition-all duration-300 overflow-hidden ${
-            isError
-              ? "bg-gradient-to-tr from-red-500 via-rose-600 to-amber-600 text-white shadow-red-500/20"
-              : isThinking
-              ? "bg-gradient-to-tr from-zinc-700 via-zinc-800 to-zinc-900 text-white dark:from-zinc-200 dark:via-zinc-300 dark:to-zinc-100 dark:text-zinc-900 shadow-indigo-500/20 animate-pulse"
-              : "bg-gradient-to-tr from-sky-300 via-indigo-300 to-violet-300 dark:from-slate-700 dark:via-indigo-900 dark:to-slate-800 text-zinc-900 dark:text-white shadow-sky-500/20 border border-white/40 dark:border-white/10"
+          className={`relative flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 rounded-full shadow-2xl transition-all duration-300 select-none ${
+            isThinking ? "animate-pulse" : ""
           }`}
         >
-          {/* Inner cloud / fluid sheen overlay */}
-          <div className="absolute inset-0 bg-radial from-white/40 via-transparent to-black/10 dark:from-white/20 dark:to-black/30 pointer-events-none" />
+          {/* The high-res transparent orb asset */}
+          <div className="relative w-full h-full rounded-full overflow-hidden flex items-center justify-center">
+            <img
+              src="/voice-orb.png"
+              alt="Voice Interaction Orb"
+              className={`w-full h-full object-contain pointer-events-none select-none transition-transform duration-300 ${
+                phase === "listening" || phase === "responding" ? "scale-105" : "scale-100"
+              }`}
+            />
 
-          {/* Thinking State: 3 Harmonious pulsing dots */}
-          {isThinking ? (
-            <div className="relative z-10 flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-white dark:bg-zinc-900 animate-bounce [animation-delay:-0.3s]" />
-              <span className="h-1.5 w-1.5 rounded-full bg-white dark:bg-zinc-900 animate-bounce [animation-delay:-0.15s]" />
-              <span className="h-1.5 w-1.5 rounded-full bg-white dark:bg-zinc-900 animate-bounce" />
-            </div>
-          ) : isError ? (
-            <div className="relative z-10 flex flex-col items-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-white">
-                {isLimit ? "Limit" : "Offline"}
-              </span>
-            </div>
-          ) : (
-            /* Live Audio Waveform Bars */
-            <div className="relative z-10 flex items-center gap-1 h-6 px-1">
-              {[0, 1, 2, 3, 4].map((i) => (
-                <span
-                  key={i}
-                  ref={(el) => {
-                    waveBarsRef.current[i] = el;
-                  }}
-                  className={`w-1 h-5 rounded-full transition-transform duration-75 origin-center ${
-                    phase === "ready"
-                      ? "bg-zinc-600/40 dark:bg-zinc-400/40 scale-y-[0.3]"
-                      : "bg-zinc-800 dark:bg-zinc-100"
-                  }`}
-                  style={{
-                    transform:
-                      phase === "listening" || phase === "responding"
-                        ? "scaleY(0.25)"
-                        : undefined,
-                  }}
-                />
-              ))}
-            </div>
-          )}
+            {/* Specular shimmer overlay when audio is active or thinking */}
+            <div
+              className={`absolute inset-0 rounded-full bg-radial from-white/25 via-transparent to-transparent pointer-events-none transition-opacity duration-300 ${
+                phase === "listening" || phase === "responding"
+                  ? "opacity-100 animate-pulse"
+                  : isThinking
+                  ? "opacity-80 animate-pulse"
+                  : "opacity-20"
+              }`}
+            />
+          </div>
         </div>
       </div>
 

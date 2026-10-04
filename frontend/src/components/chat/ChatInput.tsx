@@ -244,11 +244,11 @@ export function ChatInput({
             >
               <Mic className="h-4 w-4" />
             </button>
-            {voiceAvailable && (
+            {/* {voiceAvailable && (
               <span className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
                 Live Voice
               </span>
-            )}
+            )} */}
           </div>
 
           <div className="flex items-center gap-2">

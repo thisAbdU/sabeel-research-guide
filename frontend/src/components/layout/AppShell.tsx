@@ -1,11 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Sidebar } from "./Sidebar";
 import { Menu, Sparkles, X } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { useChat } from "@/context/ChatContext";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -13,22 +12,44 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const [mobileDrawerOpen, setMobileDrawerOpen] = React.useState(false);
-  const router = useRouter();
-  const { startNewChat } = useChat();
+  const [isCollapsed, setIsCollapsed] = React.useState<boolean>(false);
+
+  // Sync initial state from localStorage after mount to ensure SSR hydration consistency
+  React.useEffect(() => {
+    try {
+      const stored = localStorage.getItem("scholarxiv_sidebar_collapsed");
+      if (stored === "true") {
+        setIsCollapsed(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const toggleCollapse = React.useCallback(() => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("scholarxiv_sidebar_collapsed", String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#fcfcfd] dark:bg-zinc-950">
-      <Sidebar />
+      <Sidebar
+        isCollapsed={isCollapsed}
+        onToggleCollapse={toggleCollapse}
+      />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <header className="lg:hidden shrink-0 flex h-14 items-center justify-between border-b border-zinc-200 bg-white/90 px-4 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90">
-          <button
-            type="button"
+          <Link
+            href="/"
             className="flex items-center gap-2"
-            onClick={() => {
-              startNewChat();
-              router.push("/chat");
-            }}
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950">
               <Sparkles className="h-4 w-4" />
@@ -36,7 +57,7 @@ export function AppShell({ children }: AppShellProps) {
             <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
               ScholarXiv Companion
             </span>
-          </button>
+          </Link>
 
           <div className="flex items-center gap-1">
             <ThemeToggle />

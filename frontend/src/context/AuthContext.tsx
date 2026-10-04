@@ -210,22 +210,17 @@ loadUser();
     try {
       await apiFetch("/api/auth/logout", {
         method: "POST",
+      }).catch((err) => {
+        console.warn("Logout request failed:", err);
       });
-
+    } finally {
       setUser(null);
       setSession(null);
-
-      return {
-        error: null,
-      };
-    } catch (error) {
-      return {
-        error:
-          error instanceof Error
-            ? error
-            : new Error("Failed to sign out"),
-      };
     }
+
+    return {
+      error: null,
+    };
   };
 
   const displayName = React.useMemo(() => {

@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Sparkles,
   Flame,
@@ -10,7 +9,6 @@ import {
   Compass,
   ArrowRight,
   Coffee,
-  Loader2,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/Button";
@@ -20,26 +18,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/Card";
-import { useAuth } from "@/context/AuthContext";
 
 export default function Home() {
-  const router = useRouter();
-  const { user, isLoading } = useAuth();
-
-  React.useEffect(() => {
-    if (!isLoading && user) {
-      router.replace("/chat");
-    }
-  }, [isLoading, user, router]);
-
-  if (isLoading || user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#fcfcfd] dark:bg-zinc-950">
-        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
-      </div>
-    );
-  }
-
   return (
     <div className="flex min-h-screen flex-col bg-[#fcfcfd] dark:bg-zinc-950">
       <Navbar />

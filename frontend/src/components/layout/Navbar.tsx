@@ -3,12 +3,11 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Sparkles, Menu, X, Compass, MessageSquare, LayoutDashboard } from "lucide-react";
+import { Sparkles, Menu, X, Compass, SquarePen, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 import { useAuth } from "@/context/AuthContext";
-import { useChat } from "@/context/ChatContext";
 import { LogOut, User as UserIcon } from "lucide-react";
 
 export function Navbar() {
@@ -16,35 +15,29 @@ export function Navbar() {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const { user, displayName, signOut } = useAuth();
-  const { startNewChat } = useChat();
 
-  const homeHref = user ? "/chat" : "/";
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } finally {
+      setMobileMenuOpen(false);
+      router.replace("/login");
+    }
+  };
 
   const navLinks = [
-    { href: homeHref, label: "Home", isHome: true },
-    { href: "/chat", label: "Companion", icon: MessageSquare },
+    { href: "/chat", label: "New Chat", icon: SquarePen },
     { href: "/discover", label: "Discover", icon: Compass },
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   ];
-
-  const goHome = (e?: React.MouseEvent) => {
-    e?.preventDefault();
-    setMobileMenuOpen(false);
-    if (user) {
-      startNewChat();
-      router.push("/chat");
-      return;
-    }
-    router.push("/");
-  };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-zinc-200/80 bg-white/80 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/80">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand Logo */}
         <Link
-          href={homeHref}
-          onClick={goHome}
+          href="/"
+          onClick={() => setMobileMenuOpen(false)}
           className="flex items-center gap-2.5 transition-opacity hover:opacity-90"
         >
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-950">
@@ -63,15 +56,11 @@ export function Navbar() {
         {/* Desktop Navigation Links */}
         <nav className="hidden items-center gap-1 md:flex">
           {navLinks.map((link) => {
-            const isHome = "isHome" in link && link.isHome;
-            const isActive = isHome
-              ? pathname === (user ? "/chat" : "/")
-              : pathname === link.href && !(user && link.href === "/chat" && pathname === "/");
+            const isActive = pathname === link.href;
             return (
               <Link
                 key={link.label}
                 href={link.href}
-                onClick={isHome ? goHome : undefined}
                 className={`relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800/80 dark:text-zinc-100"
@@ -99,12 +88,12 @@ export function Navbar() {
                 </span>
               </div>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                onClick={() => signOut()}
-                className="text-xs gap-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                onClick={handleSignOut}
+                className="h-9 px-3 text-xs font-medium gap-2 text-zinc-700 hover:text-red-600 hover:border-red-200 hover:bg-red-50/60 dark:text-zinc-300 dark:hover:text-red-400 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer"
               >
-                <LogOut className="h-3.5 w-3.5" />
+                <LogOut className="h-4 w-4" />
                 <span>Sign Out</span>
               </Button>
               <Link href="/chat">
@@ -149,13 +138,11 @@ export function Navbar() {
       {mobileMenuOpen && (
         <div className="border-b border-zinc-200 bg-white px-4 pt-2 pb-6 md:hidden dark:border-zinc-800 dark:bg-zinc-950">
           <div className="flex flex-col space-y-1">
-            {navLinks.map((link) => {
-              const isHome = "isHome" in link && link.isHome;
-              return (
+            {navLinks.map((link) => (
               <Link
                 key={link.label}
                 href={link.href}
-                onClick={isHome ? goHome : () => setMobileMenuOpen(false)}
+                onClick={() => setMobileMenuOpen(false)}
                 className={`flex items-center justify-between rounded-lg px-3 py-2.5 text-base font-medium ${
                   pathname === link.href
                     ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
@@ -167,8 +154,7 @@ export function Navbar() {
                   {link.label}
                 </div>
               </Link>
-            );
-            })}
+            ))}
             <div className="pt-4 flex flex-col gap-2">
               {user ? (
                 <>
@@ -180,11 +166,9 @@ export function Navbar() {
                   </div>
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      signOut();
-                      setMobileMenuOpen(false);
-                    }}
-                    className="w-full justify-center gap-2 text-xs"
+                    size="sm"
+                    onClick={handleSignOut}
+                    className="w-full h-9 justify-center gap-2 text-xs font-medium text-zinc-700 hover:text-red-600 hover:border-red-200 hover:bg-red-50/60 dark:text-zinc-300 dark:hover:text-red-400 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer"
                   >
                     <LogOut className="h-4 w-4" />
                     <span>Sign Out</span>

@@ -20,6 +20,13 @@ export const metadata: Metadata = {
   title: "ScholarXiv Research Companion",
   description:
     "Voice-enabled AI research companion: Vent, Roast, Get Funding, and Discover research.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
