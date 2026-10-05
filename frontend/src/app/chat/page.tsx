@@ -385,6 +385,7 @@ function ChatPageInner() {
                   getInputLevel={voice.getInputLevel}
                   getOutputLevel={voice.getOutputLevel}
                   transcript={voice.liveTranscript}
+                  transcriptRole={voice.transcriptRole}
                   errorCode={voice.errorCode}
                   onRetry={() => {
                     void voice.connect();

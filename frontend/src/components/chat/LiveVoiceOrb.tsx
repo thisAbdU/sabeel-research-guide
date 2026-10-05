@@ -9,6 +9,7 @@ interface LiveVoiceOrbProps {
   getInputLevel?: () => number;
   getOutputLevel?: () => number;
   transcript?: string;
+  transcriptRole?: "user" | "ai" | null;
   errorCode?: string | null;
   onRetry?: () => void;
   className?: string;
@@ -19,6 +20,7 @@ export function LiveVoiceOrb({
   getInputLevel,
   getOutputLevel,
   transcript,
+  transcriptRole = null,
   errorCode,
   onRetry,
   className = "",
@@ -180,10 +182,16 @@ export function LiveVoiceOrb({
           {statusLabel}
         </span>
 
-        {/* Live speech transcription feedback while speaking */}
+        {/* Live captions: user while listening, assistant while TTS plays */}
         {transcript && (
-          <p className="mt-1 text-xs text-zinc-800 dark:text-zinc-200 font-medium italic truncate max-w-xs animate-fadeIn">
-            &ldquo;{transcript}&rdquo;
+          <p
+            className={`mt-1.5 text-xs font-medium animate-fadeIn max-w-sm ${
+              transcriptRole === "ai"
+                ? "text-zinc-700 dark:text-zinc-200 not-italic line-clamp-4 text-left"
+                : "text-zinc-800 dark:text-zinc-200 italic truncate max-w-xs"
+            }`}
+          >
+            {transcriptRole === "ai" ? transcript : `\u201C${transcript}\u201D`}
           </p>
         )}
 

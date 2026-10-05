@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useVoxideVoice, type VoxideStatus } from "@voxide/react";
+import { useVoxideVoice, type VoxideClient, type VoxideStatus } from "@voxide/react";
 import { getVoxideClient, fetchVoxideClient } from "@/lib/voxide";
 import type { ChatMode } from "@/types/chat";
 
@@ -13,6 +13,9 @@ export type VoicePhase =
   | "thinking"
   | "responding"
   | "error";
+
+/** Grace period after TTS so speaker bleed doesn't get transcribed as the user. */
+const MIC_UNMUTE_GRACE_MS = 450;
 
 export function mapVoicePhase(status: VoxideStatus): VoicePhase {
   switch (status) {
@@ -34,11 +37,27 @@ export function mapVoicePhase(status: VoxideStatus): VoicePhase {
   }
 }
 
+/**
+ * Half-duplex mic gate. Voxide keeps sending audio_input while TTS plays;
+ * laptop speaker bleed then barge-ins and re-transcribes the assistant.
+ * Muting tracks sends silence over the WS instead.
+ */
+function setMicCaptureEnabled(client: VoxideClient | null, enabled: boolean) {
+  const mic = (client as { _voiceMic?: MediaStream | null } | null)?._voiceMic;
+  if (!mic) return;
+  for (const track of mic.getAudioTracks()) {
+    track.enabled = enabled;
+  }
+}
+
 type SendThroughChat = (content: string) => Promise<string | null>;
 
 /**
  * Person 2 pipeline: mic → Voxide (STT) → text → existing chat workflow →
  * reply text → Voxide (TTS). Does not claim unverified language packs.
+ *
+ * Half-duplex while the assistant is working/speaking (ChatGPT-style):
+ * mic off until TTS finishes or the user interrupts.
  */
 export function useVoicePipeline(options: {
   mode: ChatMode;
@@ -73,7 +92,39 @@ export function useVoicePipeline(options: {
   const conversationIdRef = React.useRef(options.conversationId);
   conversationIdRef.current = options.conversationId;
 
+  /** True from tool start until TTS ends / interrupt — blocks echo tool loops. */
+  const assistantBusyRef = React.useRef(false);
+  const unmuteTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [liveTranscript, setLiveTranscript] = React.useState<string>("");
+  const [transcriptRole, setTranscriptRole] = React.useState<"user" | "ai" | null>(null);
+
+  const clearUnmuteTimer = React.useCallback(() => {
+    if (unmuteTimerRef.current) {
+      clearTimeout(unmuteTimerRef.current);
+      unmuteTimerRef.current = null;
+    }
+  }, []);
+
+  const muteMic = React.useCallback(() => {
+    clearUnmuteTimer();
+    setMicCaptureEnabled(client, false);
+  }, [client, clearUnmuteTimer]);
+
+  const unmuteMic = React.useCallback(
+    (immediate = false) => {
+      clearUnmuteTimer();
+      if (immediate) {
+        setMicCaptureEnabled(client, true);
+        return;
+      }
+      unmuteTimerRef.current = setTimeout(() => {
+        unmuteTimerRef.current = null;
+        setMicCaptureEnabled(client, true);
+      }, MIC_UNMUTE_GRACE_MS);
+    },
+    [client, clearUnmuteTimer]
+  );
 
   React.useEffect(() => {
     if (!client) return;
@@ -85,6 +136,20 @@ export function useVoicePipeline(options: {
       mode: "adaptive",
       supported: ["en", "am", "om"],
     });
+
+    // Drop echo-triggered tool calls while the assistant turn is in flight.
+    // Register once per client instance (effect may re-run; middlewares aren't removable).
+    const gated = client as VoxideClient & { __echoGate?: boolean };
+    if (!gated.__echoGate) {
+      gated.__echoGate = true;
+      client.use((ctx, next, cancel) => {
+        if (ctx.name === "askResearchCompanion" && assistantBusyRef.current) {
+          cancel();
+          return;
+        }
+        return next();
+      });
+    }
 
     // 2. Register askResearchCompanion BEFORE init with global scope
     client.register({
@@ -102,10 +167,22 @@ export function useVoicePipeline(options: {
         handler: async (args: Record<string, unknown>) => {
           const text = String(args.message ?? "").trim();
           if (!text) return { ok: false, error: "Empty message" };
+          if (assistantBusyRef.current) {
+            return { ok: false, error: "Assistant is still responding" };
+          }
 
-          setLiveTranscript("");
+          // Lock mic immediately so speaker bleed can't barge-in mid-reply.
+          assistantBusyRef.current = true;
+          muteMic();
+          setLiveTranscript(text);
+          setTranscriptRole("user");
+
           const reply = await sendRef.current(text);
-          if (!reply) return { ok: false, error: "Research companion returned no reply" };
+          if (!reply) {
+            assistantBusyRef.current = false;
+            unmuteMic(true);
+            return { ok: false, error: "Research companion returned no reply" };
+          }
 
           // Returned fields are spoken by Voxide after the tool call.
           // Strip markdown links, formatting symbols, and URLs so TTS pronounces naturally
@@ -115,6 +192,10 @@ export function useVoicePipeline(options: {
             .replace(/https?:\/\/[^\s\)]+/g, "") // remove bare URLs
             .replace(/\s+/g, " ") // normalize whitespace
             .trim();
+
+          // Show reply text while TTS plays (ChatGPT-style caption).
+          setLiveTranscript(spokenReply);
+          setTranscriptRole("ai");
 
           return { ok: true, reply: spokenReply };
         },
@@ -163,12 +244,18 @@ export function useVoicePipeline(options: {
       conversationId: conversationIdRef.current,
     }));
 
-    // 5. Track live transcripts during spoken interaction
+    // 5. Live captions: user while listening, AI while responding
     const unsubTranscript = client.on(
       "transcript",
       (msg: { role?: string; text?: string; partial?: boolean }) => {
-        if (msg?.role === "user" && msg.text) {
+        if (!msg?.text) return;
+        if (msg.role === "user") {
+          if (assistantBusyRef.current) return; // ignore echo STT
           setLiveTranscript(msg.text);
+          setTranscriptRole("user");
+        } else if (msg.role === "ai") {
+          setLiveTranscript(msg.text);
+          setTranscriptRole("ai");
         }
       }
     );
@@ -176,21 +263,27 @@ export function useVoicePipeline(options: {
     const unsubMsg = client.on(
       "message",
       (msg: { role?: string; text?: string }) => {
-        if (msg?.role === "user" && msg.text) {
+        if (!msg?.text) return;
+        if (msg.role === "user") {
+          if (assistantBusyRef.current) return;
           setLiveTranscript(msg.text);
-        } else if (msg?.role === "ai") {
-          setLiveTranscript("");
+          setTranscriptRole("user");
+        } else if (msg.role === "ai") {
+          setLiveTranscript(msg.text);
+          setTranscriptRole("ai");
         }
       }
     );
 
     return () => {
       cancelled = true;
+      clearUnmuteTimer();
       unsubTranscript?.();
       unsubMsg?.();
       client.unregister("askResearchCompanion");
+      assistantBusyRef.current = false;
     };
-  }, [client]);
+  }, [client, muteMic, unmuteMic, clearUnmuteTimer]);
 
   React.useEffect(() => {
     if (!client || !options.userId) return;
@@ -214,18 +307,52 @@ export function useVoicePipeline(options: {
       setSessionActive(true);
     } else if (voice.status === "idle") {
       setSessionActive(false);
+      assistantBusyRef.current = false;
+      setLiveTranscript("");
+      setTranscriptRole(null);
     }
   }, [voice.status]);
+
+  // Half-duplex: only capture mic while actively listening for the user.
+  React.useEffect(() => {
+    if (!client || !sessionActive) return;
+
+    if (
+      voice.status === "speaking" ||
+      voice.status === "executing" ||
+      voice.status === "thinking" ||
+      voice.status === "connecting"
+    ) {
+      muteMic();
+      return;
+    }
+
+    if (voice.status === "listening") {
+      if (assistantBusyRef.current) {
+        // TTS finished → SDK flipped to listening; release gate after grace.
+        assistantBusyRef.current = false;
+        unmuteMic(false);
+      } else {
+        unmuteMic(true);
+      }
+    }
+  }, [client, sessionActive, voice.status, muteMic, unmuteMic]);
 
   const isSessionOpen = sessionActive || (voice.status !== "idle" && voice.status !== "armed");
 
   const disconnect = React.useCallback(() => {
     setSessionActive(false);
+    assistantBusyRef.current = false;
+    clearUnmuteTimer();
+    setMicCaptureEnabled(client, true);
+    setLiveTranscript("");
+    setTranscriptRole(null);
     voice.disconnect();
-  }, [voice]);
+  }, [voice, client, clearUnmuteTimer]);
 
   const connect = React.useCallback(async () => {
     setSessionActive(true);
+    assistantBusyRef.current = false;
     await voice.connect();
   }, [voice]);
 
@@ -239,10 +366,16 @@ export function useVoicePipeline(options: {
   }, [client, isSessionOpen, disconnect, connect]);
 
   const interrupt = React.useCallback(() => {
+    // Stop TTS and open the mic immediately (user barge-in).
+    assistantBusyRef.current = false;
     voice.interrupt();
-  }, [voice]);
+    unmuteMic(true);
+    setTranscriptRole("user");
+  }, [voice, unmuteMic]);
 
   const getInputLevel = React.useCallback(() => {
+    // Don't animate the orb from speaker bleed while muted/responding.
+    if (assistantBusyRef.current || voice.status === "speaking") return 0;
     return typeof voice.getInputLevel === "function" ? voice.getInputLevel() : 0;
   }, [voice]);
 
@@ -255,6 +388,7 @@ export function useVoicePipeline(options: {
     status: voice.status,
     phase,
     liveTranscript,
+    transcriptRole,
     currentAction: voice.currentAction,
     errorCode: voice.errorCode,
     isSessionOpen,

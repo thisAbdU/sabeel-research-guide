@@ -641,3 +641,158 @@ backend/app/api/chat/route.ts                      | 132 +++++-
  tools/readmadeprompt.txt                           |  75 ++++
  38 files changed, 3695 insertions(+), 481 deletions(-)
 ```
+
+
+################################################################################
+# 2026-10-04 17:42:23
+################################################################################
+
+You are writing a daily product changelog from git history.
+
+Current version: v1.6
+Repo: sabeel-research-guide
+
+Produce exactly three artifacts, in this order, nothing else:
+
+1) Version Tag
+   - Semver tag for this release (bump from current version).
+   - One line, e.g. v1.1
+
+2) Update Title
+   - One short public-facing title for this day's changes.
+
+3) changelog.md
+   - Markdown body only (no extra wrapping).
+   - User-facing: what changed, why it matters.
+   - Group as Added / Changed / Fixed when it fits.
+   - Skip noise (lockfiles, formatting-only, generated files) unless it changes behavior.
+
+Commit messages since last changelog:
+```
+6579de0 feat: integrated addis ai for am and om translation
+fa847b9 :feat: save funders
+```
+
+Files changed (status + line counts). Use this instead of patches:
+```
+M	backend/.env.example
+M	backend/app/api/dashboard/route.ts
+M	backend/app/api/funding/route.ts
+M	backend/app/api/voice/route.ts
+M	backend/lib/ai/complete.ts
+M	backend/lib/ai/funding.ts
+M	backend/lib/env.ts
+A	backend/lib/translate.ts
+M	backend/lib/types.ts
+M	backend/package.json
+A	backend/test/translate.test.ts
+A	frontend/src/app/api/voice/route.ts
+M	frontend/src/app/chat/page.tsx
+M	frontend/src/app/dashboard/page.tsx
+M	frontend/src/components/chat/ChatInput.tsx
+M	frontend/src/components/chat/ChatMessage.tsx
+M	frontend/src/components/chat/LiveVoiceMode.tsx
+M	frontend/src/components/chat/LiveVoiceOrb.tsx
+M	frontend/src/components/chat/SourceCard.tsx
+M	frontend/src/components/chat/SourceDetailsPanel.tsx
+M	frontend/src/hooks/useVoicePipeline.ts
+M	frontend/src/lib/voxide.ts
+A	frontend/src/services/funding.ts
+M	tools/.changelog_state
+M	tools/readmadeprompt.txt
+
+backend/.env.example                               |   1 +
+ backend/app/api/dashboard/route.ts                 |  19 +-
+ backend/app/api/funding/route.ts                   | 183 ++++++++++++++-
+ backend/app/api/voice/route.ts                     |  14 +-
+ backend/lib/ai/complete.ts                         |  62 ++++-
+ backend/lib/ai/funding.ts                          |  21 +-
+ backend/lib/env.ts                                 |  13 ++
+ backend/lib/translate.ts                           | 107 +++++++++
+ backend/lib/types.ts                               |   1 +
+ backend/package.json                               |   2 +-
+ backend/test/translate.test.ts                     |  74 ++++++
+ frontend/src/app/api/voice/route.ts                |  16 ++
+ frontend/src/app/chat/page.tsx                     | 171 ++++++++++++--
+ frontend/src/app/dashboard/page.tsx                | 126 +++++++++-
+ frontend/src/components/chat/ChatInput.tsx         | 143 ++++++++++--
+ frontend/src/components/chat/ChatMessage.tsx       |  11 +
+ frontend/src/components/chat/LiveVoiceMode.tsx     |   6 +
+ frontend/src/components/chat/LiveVoiceOrb.tsx      | 256 +++++++++++++--------
+ frontend/src/components/chat/SourceCard.tsx        |  37 ++-
+ .../src/components/chat/SourceDetailsPanel.tsx     |  39 +++-
+ frontend/src/hooks/useVoicePipeline.ts             | 104 ++++++++-
+ frontend/src/lib/voxide.ts                         |  54 ++++-
+ frontend/src/services/funding.ts                   |  61 +++++
+ tools/.changelog_state                             |   4 +-
+ tools/readmadeprompt.txt                           | 117 ++++++++++
+ 25 files changed, 1433 insertions(+), 209 deletions(-)
+```
+
+
+################################################################################
+# 2026-10-05 21:50:24
+################################################################################
+
+You are writing a daily product changelog from git history.
+
+Current version: v1.7
+Repo: sabeel-research-guide
+
+Produce exactly three artifacts, in this order, nothing else:
+
+1) Version Tag
+   - Semver tag for this release (bump from current version).
+   - One line, e.g. v1.1
+
+2) Update Title
+   - One short public-facing title for this day's changes.
+
+3) changelog.md
+   - Markdown body only (no extra wrapping).
+   - User-facing: what changed, why it matters.
+   - Group as Added / Changed / Fixed when it fits.
+   - Skip noise (lockfiles, formatting-only, generated files) unless it changes behavior.
+
+Commit messages since last changelog:
+```
+20600a8 update: live voice intreraction ui and sidebar collapse
+```
+
+Files changed (status + line counts). Use this instead of patches:
+```
+A	frontend/public/favicon.svg
+A	frontend/public/icon.svg
+A	frontend/public/voice-orb.png
+A	frontend/src/app/api/auth/logout/route.ts
+M	frontend/src/app/chat/page.tsx
+A	frontend/src/app/icon.svg
+M	frontend/src/app/layout.tsx
+M	frontend/src/app/page.tsx
+M	frontend/src/components/chat/ChatInput.tsx
+M	frontend/src/components/chat/LiveVoiceOrb.tsx
+M	frontend/src/components/layout/AppShell.tsx
+M	frontend/src/components/layout/Navbar.tsx
+M	frontend/src/components/layout/Sidebar.tsx
+M	frontend/src/context/AuthContext.tsx
+M	tools/.changelog_state
+M	tools/readmadeprompt.txt
+
+frontend/public/favicon.svg                   |   6 +
+ frontend/public/icon.svg                      |   6 +
+ frontend/public/voice-orb.png                 | Bin 0 -> 99739 bytes
+ frontend/src/app/api/auth/logout/route.ts     |  29 ++++
+ frontend/src/app/chat/page.tsx                |  52 -------
+ frontend/src/app/icon.svg                     |   6 +
+ frontend/src/app/layout.tsx                   |   7 +
+ frontend/src/app/page.tsx                     |  20 ---
+ frontend/src/components/chat/ChatInput.tsx    |   4 +-
+ frontend/src/components/chat/LiveVoiceOrb.tsx |  92 ++++--------
+ frontend/src/components/layout/AppShell.tsx   |  45 ++++--
+ frontend/src/components/layout/Navbar.tsx     |  62 +++-----
+ frontend/src/components/layout/Sidebar.tsx    | 195 ++++++++++++++++++++------
+ frontend/src/context/AuthContext.tsx          |  19 +--
+ tools/.changelog_state                        |   4 +-
+ tools/readmadeprompt.txt                      |  87 ++++++++++++
+ 16 files changed, 389 insertions(+), 245 deletions(-)
+```
