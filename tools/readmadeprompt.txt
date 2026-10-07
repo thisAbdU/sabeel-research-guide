@@ -796,3 +796,74 @@ frontend/public/favicon.svg                   |   6 +
  tools/readmadeprompt.txt                      |  87 ++++++++++++
  16 files changed, 389 insertions(+), 245 deletions(-)
 ```
+
+
+################################################################################
+# 2026-10-07 12:53:04
+################################################################################
+
+You are writing a daily product changelog from git history.
+
+Current version: v1.8
+Repo: sabeel-research-guide
+
+Produce exactly three artifacts, in this order, nothing else:
+
+1) Version Tag
+   - Semver tag for this release (bump from current version).
+   - One line, e.g. v1.1
+
+2) Update Title
+   - One short public-facing title for this day's changes.
+
+3) changelog.md
+   - Markdown body only (no extra wrapping).
+   - User-facing: what changed, why it matters.
+   - Group as Added / Changed / Fixed when it fits.
+   - Skip noise (lockfiles, formatting-only, generated files) unless it changes behavior.
+
+Commit messages since last changelog:
+```
+75d3720 fix: save funder. payment recipet verification.
+dfce4ba fix: voice transcription
+```
+
+Files changed (status + line counts). Use this instead of patches:
+```
+M	backend/app/api/dashboard/route.ts
+M	backend/app/api/funding/route.ts
+M	backend/app/api/research/route.ts
+M	backend/app/api/support/verify/route.ts
+M	backend/lib/links-et.ts
+M	backend/lib/support.ts
+M	frontend/src/app/chat/page.tsx
+M	frontend/src/app/dashboard/page.tsx
+M	frontend/src/app/discover/page.tsx
+M	frontend/src/app/login/page.tsx
+M	frontend/src/components/chat/LiveVoiceOrb.tsx
+M	frontend/src/components/discover/SupportModal.tsx
+M	frontend/src/hooks/useVoicePipeline.ts
+M	frontend/src/lib/api.ts
+M	frontend/src/services/funding.ts
+M	tools/.changelog_state
+M	tools/readmadeprompt.txt
+
+backend/app/api/dashboard/route.ts                |  15 +-
+ backend/app/api/funding/route.ts                  |   4 +-
+ backend/app/api/research/route.ts                 |  34 +-
+ backend/app/api/support/verify/route.ts           |   4 +-
+ backend/lib/links-et.ts                           |  42 ++-
+ backend/lib/support.ts                            |  41 +++
+ frontend/src/app/chat/page.tsx                    |   1 +
+ frontend/src/app/dashboard/page.tsx               | 367 +++++++++++++++-------
+ frontend/src/app/discover/page.tsx                |  33 +-
+ frontend/src/app/login/page.tsx                   |   2 +-
+ frontend/src/components/chat/LiveVoiceOrb.tsx     |  14 +-
+ frontend/src/components/discover/SupportModal.tsx |  88 +++++-
+ frontend/src/hooks/useVoicePipeline.ts            | 156 ++++++++-
+ frontend/src/lib/api.ts                           |  13 +-
+ frontend/src/services/funding.ts                  |  17 +
+ tools/.changelog_state                            |   4 +-
+ tools/readmadeprompt.txt                          | 155 +++++++++
+ 17 files changed, 836 insertions(+), 154 deletions(-)
+```
