@@ -13,13 +13,20 @@ import {
   Loader2,
   ExternalLink,
   Trash2,
+  Trophy,
+  Heart,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { removeFundingMatch, type FundingMatch } from "@/services/funding";
+import {
+  listFundingMatches,
+  removeFundingMatch,
+  type FundingMatch,
+  type TopSupporter,
+} from "@/services/funding";
 
 type DashboardResearch = {
   id: string;
@@ -34,13 +41,14 @@ type DashboardResponse = {
   data: {
     stats: {
       publishedWorks: number;
-      draftIdeas: number;
+      privateProjects: number;
       fundingMatches: number;
       tipsReceived: number;
       tipsCurrency: string;
     };
     research: DashboardResearch[];
     fundingMatches?: FundingMatch[];
+    topSupporters?: TopSupporter[];
   };
 };
 
@@ -57,6 +65,86 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function formatAmount(amount: number, currency: string): string {
+  const rounded = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+  return `${rounded} ${currency.toUpperCase()}`;
+}
+
+function TopSupportersPanel({
+  supporters,
+  loading,
+}: {
+  supporters: TopSupporter[];
+  loading?: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="flex justify-center py-8">
+        <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
+
+  if (supporters.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 px-5 py-7 text-center dark:border-zinc-800 dark:bg-zinc-900/30">
+        <Heart className="mx-auto h-5 w-5 text-zinc-400" />
+        <p className="mt-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          No supporters yet
+        </p>
+        <p className="mt-1 text-xs text-zinc-500 max-w-sm mx-auto">
+          When people tip your published research on Discover, the top five will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ol className="space-y-2">
+      {supporters.map((s, index) => {
+        const rank = index + 1;
+        const isTop = rank === 1;
+        return (
+          <li
+            key={`${s.displayName}-${s.supportedAt}-${rank}`}
+            className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 ${
+              isTop
+                ? "border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/80"
+                : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+            }`}
+          >
+            <span
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums ${
+                isTop
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+              }`}
+            >
+              {rank}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  {s.displayName}
+                </span>
+                {isTop && (
+                  <Trophy className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
+                )}
+              </div>
+              <p className="text-[11px] text-zinc-500">
+                Supported {relativeTime(s.supportedAt)}
+              </p>
+            </div>
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+              {formatAmount(s.amount, s.currency)}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
@@ -65,23 +153,40 @@ export default function DashboardPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [stats, setStats] = React.useState({
     publishedWorks: 0,
-    draftIdeas: 0,
+    privateProjects: 0,
     fundingMatches: 0,
     tipsReceived: 0,
     tipsCurrency: "ETB",
   });
   const [research, setResearch] = React.useState<DashboardResearch[]>([]);
   const [fundingMatches, setFundingMatches] = React.useState<FundingMatch[]>([]);
+  const [topSupporters, setTopSupporters] = React.useState<TopSupporter[]>([]);
   const [actionBusy, setActionBusy] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch<DashboardResponse>("/api/dashboard");
-      setStats(res.data.stats);
-      setResearch(res.data.research ?? []);
-      setFundingMatches(res.data.fundingMatches ?? []);
+      const [dash, funding] = await Promise.all([
+        apiFetch<DashboardResponse>("/api/dashboard"),
+        listFundingMatches(),
+      ]);
+      setStats(dash.data.stats);
+      setResearch(dash.data.research ?? []);
+      setTopSupporters(dash.data.topSupporters ?? []);
+      // Prefer dedicated /api/funding list so bookmarks always match the save API.
+      const fromFundingApi = funding.matches ?? [];
+      setFundingMatches(
+        fromFundingApi.length > 0 ? fromFundingApi : dash.data.fundingMatches ?? [],
+      );
+      setStats((prev) => ({
+        ...prev,
+        ...dash.data.stats,
+        fundingMatches:
+          fromFundingApi.length > 0
+            ? fromFundingApi.length
+            : dash.data.stats.fundingMatches,
+      }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
@@ -156,22 +261,22 @@ export default function DashboardPage() {
 
   const statCards = [
     {
-      title: "Published Works",
+      title: "Published",
       value: String(stats.publishedWorks),
       icon: Globe,
       desc: "Live on Discover",
     },
     {
-      title: "Draft Ideas",
-      value: String(stats.draftIdeas),
+      title: "Private",
+      value: String(stats.privateProjects),
       icon: FileText,
-      desc: "Private to you",
+      desc: "Only visible to you",
     },
     {
-      title: "Funding Matches",
+      title: "Saved Funders",
       value: String(stats.fundingMatches),
       icon: Coins,
-      desc: "Found via Companion",
+      desc: "Bookmarked from Companion",
     },
     {
       title: "Tips Received",
@@ -190,7 +295,7 @@ export default function DashboardPage() {
               Researcher Dashboard
             </h1>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              Manage your private research drafts, public Discover submissions, and Links.et support settings.
+              Manage published research, saved funders, and Links.et tip settings.
             </p>
           </div>
 
@@ -225,140 +330,182 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+        <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab("research")}
-            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === "research"
                 ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                 : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
             }`}
           >
-            My Research & Drafts
+            My Research
           </button>
           <button
             onClick={() => setActiveTab("support")}
-            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === "support"
                 ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                 : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
             }`}
           >
-            Support & Tips Settings
+            Support & Tips
           </button>
           <button
             onClick={() => setActiveTab("funding")}
-            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === "funding"
                 ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                 : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
             }`}
           >
-            Saved Funder Matches
+            Saved Funders
           </button>
         </div>
 
         {activeTab === "research" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">
-                Research Projects
-              </h2>
-              <span className="text-xs text-zinc-400">
-                Research is private by default until intentionally published.
-              </span>
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">
+                  Research Projects
+                </h2>
+                <span className="text-xs text-zinc-400 text-right">
+                  Private by default until you publish to Discover.
+                </span>
+              </div>
+
+              {loading ? (
+                <div className="flex justify-center py-10">
+                  <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+                </div>
+              ) : research.length === 0 ? (
+                <Card className="p-8 text-center text-xs text-zinc-500">
+                  No research yet. Finish a Get Funding session and publish a ScholarXiv link.
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {research.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">
+                            {item.title}
+                          </span>
+                          {item.visibility === "public" ? (
+                            <span className="text-[11px] font-medium text-zinc-700 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 px-2 py-0.5 rounded">
+                              Public
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-medium text-zinc-500 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 rounded flex items-center">
+                              <Lock className="h-2.5 w-2.5 mr-1" />
+                              Private
+                            </span>
+                          )}
+                          {item.supportEnabled && (
+                            <span className="text-[11px] font-medium text-zinc-700 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 px-2 py-0.5 rounded flex items-center">
+                              <Coffee className="h-2.5 w-2.5 mr-1" />
+                              Tips Active
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-zinc-500">
+                          <span>{item.field || "General Research"}</span>
+                          <span>·</span>
+                          <span>Updated {relativeTime(item.updatedAt)}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {item.visibility === "public" ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs text-red-600 dark:text-red-400 rounded-lg"
+                            disabled={actionBusy === item.id}
+                            onClick={() => void unpublish(item.id)}
+                          >
+                            Unpublish
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="text-xs rounded-lg"
+                            disabled={actionBusy === item.id}
+                            onClick={() => void publish(item.id)}
+                          >
+                            Publish to Discover
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {loading ? (
-              <div className="flex justify-center py-10">
-                <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+            <div className="space-y-3">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">
+                    Top Supporters
+                  </h2>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    People who tipped your published research — ranked by total support.
+                  </p>
+                </div>
+                {!loading && topSupporters.length > 0 && (
+                  <span className="text-[11px] text-zinc-400 tabular-nums">
+                    Top {topSupporters.length}
+                  </span>
+                )}
               </div>
-            ) : research.length === 0 ? (
-              <Card className="p-8 text-center text-xs text-zinc-500">
-                No research drafts yet. Finish a Get Funding session and publish a ScholarXiv link.
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {research.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-800 dark:bg-zinc-900"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">
-                          {item.title}
-                        </span>
-                        {item.visibility === "public" ? (
-                          <span className="text-[11px] font-medium text-zinc-700 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 px-2 py-0.5 rounded">
-                            Public
-                          </span>
-                        ) : (
-                          <span className="text-[11px] font-medium text-zinc-500 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 rounded flex items-center">
-                            <Lock className="h-2.5 w-2.5 mr-1" />
-                            Draft
-                          </span>
-                        )}
-                        {item.supportEnabled && (
-                          <span className="text-[11px] font-medium text-zinc-700 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 px-2 py-0.5 rounded flex items-center">
-                            <Coffee className="h-2.5 w-2.5 mr-1" />
-                            Tips Active
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-zinc-500">
-                        <span>{item.field || "General Research"}</span>
-                        <span>·</span>
-                        <span>Updated {relativeTime(item.updatedAt)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {item.visibility === "public" ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-xs text-red-600 dark:text-red-400 rounded-lg"
-                          disabled={actionBusy === item.id}
-                          onClick={() => void unpublish(item.id)}
-                        >
-                          Unpublish
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="text-xs rounded-lg"
-                          disabled={actionBusy === item.id}
-                          onClick={() => void publish(item.id)}
-                        >
-                          Publish to Discover
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+              <TopSupportersPanel supporters={topSupporters} loading={loading} />
+            </div>
           </div>
         )}
 
         {activeTab === "support" && (
-          <Card className="p-6 space-y-4">
-            <div>
-              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-                Links.et Tip Configuration
-              </h2>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                Payment details are collected when you publish a ScholarXiv paper from Get Funding. Tips are verified via Links.et.
-              </p>
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <Card className="p-6 space-y-4 lg:col-span-2">
+              <div>
+                <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                  Tip settings
+                </h2>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                  Payment details are collected when you publish a ScholarXiv paper from Get Funding.
+                  Tips are verified via Links.et.
+                </p>
+              </div>
+              <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2.5 text-xs text-zinc-600 dark:text-zinc-400">
+                Received so far:{" "}
+                <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  {loading ? "—" : formatAmount(stats.tipsReceived, stats.tipsCurrency)}
+                </span>
+              </div>
+              <Link href="/chat">
+                <Button variant="outline" size="sm" className="rounded-lg">
+                  Start Get Funding session
+                </Button>
+              </Link>
+            </Card>
+
+            <div className="lg:col-span-3 space-y-3">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">
+                  Top 5 Supporters
+                </h2>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Your strongest backers across all published research.
+                </p>
+              </div>
+              <TopSupportersPanel supporters={topSupporters} loading={loading} />
             </div>
-            <Link href="/chat">
-              <Button variant="outline" size="sm" className="rounded-lg">
-                Start Get Funding session
-              </Button>
-            </Link>
-          </Card>
+          </div>
         )}
 
         {activeTab === "funding" && (
@@ -366,10 +513,10 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">
-                  Saved Funder Matches
+                  Saved Funders
                 </h2>
                 <p className="mt-1 text-xs text-zinc-500">
-                  Bookmarks from Get Funding sessions.
+                  Bookmarks from Get Funding sessions, loaded from your account.
                 </p>
               </div>
               <Link href="/chat">

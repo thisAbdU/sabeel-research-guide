@@ -177,9 +177,47 @@ async function postLinksEt<T>(
   return { status: lastStatus, data: lastData as T, retryAfter: lastRetryAfter }
 }
 
+function isProcessing(status: number, data: LinksEtVerifyResult): data is LinksEtVerifyProcessing {
+  if (status === 202) return true
+  return 'processingStatus' in data && !('ok' in data && data.ok === true)
+}
+
+/** Poll GET statusUrl until links.et resolves (or timeout). */
+export async function awaitVerifyResult(
+  initial: { status: number; data: LinksEtVerifyResult },
+  opts?: { timeoutMs?: number; intervalMs?: number },
+): Promise<{ status: number; data: LinksEtVerifyResult }> {
+  if (!isProcessing(initial.status, initial.data)) return initial
+
+  const statusUrl = initial.data.statusUrl
+  if (!statusUrl) return initial
+
+  const timeoutMs = opts?.timeoutMs ?? 90_000
+  const intervalMs = opts?.intervalMs ?? 1_000
+  const deadline = Date.now() + timeoutMs
+  const path = statusUrl.startsWith('http') ? statusUrl : `${baseUrl()}${statusUrl}`
+
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+    const response = await fetch(path, {
+      method: 'GET',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey(),
+      },
+    })
+    const data = (await parseJson(response)) as LinksEtVerifyResult
+    if (!isProcessing(response.status, data)) {
+      return { status: response.status, data }
+    }
+  }
+
+  return initial
+}
+
 export async function verifyReceipt(
   input: VerifyInput,
-  opts?: { idempotencyKey?: string },
+  opts?: { idempotencyKey?: string; awaitMs?: number },
 ): Promise<{ status: number; data: LinksEtVerifyResult }> {
   const body =
     'url' in input && input.url
@@ -190,7 +228,7 @@ export async function verifyReceipt(
     idempotencyKey: opts?.idempotencyKey,
     maxAttempts: 3,
   })
-  return { status, data }
+  return awaitVerifyResult({ status, data }, { timeoutMs: opts?.awaitMs ?? 90_000 })
 }
 
 export async function verifyReceiptImage(

@@ -12,6 +12,7 @@ import {
   type ResearchWrite,
 } from '@/lib/research'
 import { normalizeDiscoverField } from '@/lib/research-fields'
+import { aggregateTopSupporters } from '@/lib/support'
 
 export function OPTIONS() {
   return options()
@@ -43,9 +44,40 @@ export async function GET(request: Request) {
 
   if (listError) return error(listError.message, 500)
 
+  const rows = data ?? []
+  const projectIds = rows.map((row) => row.id)
+  const supportersByProject = new Map<string, ReturnType<typeof aggregateTopSupporters>>()
+
+  if (projectIds.length > 0) {
+    const { data: tipRows, error: tipError } = await viewer.supabase
+      .from('support_transactions')
+      .select(
+        'research_project_id, supporter_name, is_anonymous, amount, currency, verified_at, created_at',
+      )
+      .in('research_project_id', projectIds)
+      .eq('status', 'completed')
+      .order('amount', { ascending: false })
+      .limit(500)
+
+    if (tipError) return error(tipError.message, 500)
+
+    const grouped = new Map<string, NonNullable<typeof tipRows>>()
+    for (const tip of tipRows ?? []) {
+      const list = grouped.get(tip.research_project_id) ?? []
+      list.push(tip)
+      grouped.set(tip.research_project_id, list)
+    }
+    for (const [projectId, tips] of grouped) {
+      supportersByProject.set(projectId, aggregateTopSupporters(tips, 5))
+    }
+  }
+
   return json({
     data: {
-      research: (data ?? []).map((row) => toDiscoverResearch(row, readSupportEnabled(row.support_settings))),
+      research: rows.map((row) => ({
+        ...toDiscoverResearch(row, readSupportEnabled(row.support_settings)),
+        topSupporters: supportersByProject.get(row.id) ?? [],
+      })),
     },
   })
 }

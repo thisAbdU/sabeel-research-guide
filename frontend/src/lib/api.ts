@@ -19,11 +19,14 @@ export async function apiFetch<T = any>(
     if (!(path === "/api/auth/me" && response.status === 401)) {
       console.error(`[apiFetch] Error on ${path}:`, data || response.statusText);
     }
-    throw new Error(
-      data?.message ||
-        data?.error ||
-        "Something went wrong"
-    );
+    const nested = data?.data;
+    const message =
+      (typeof data?.message === "string" && data.message) ||
+      (typeof data?.error === "string" && data.error) ||
+      (typeof nested?.error === "string" && nested.error) ||
+      (typeof nested?.message === "string" && nested.message) ||
+      "Something went wrong";
+    throw new Error(message);
   }
 
   return data;

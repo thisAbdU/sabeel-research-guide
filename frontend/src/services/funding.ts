@@ -59,3 +59,20 @@ export async function removeFundingMatch(id: string): Promise<void> {
     method: "DELETE",
   });
 }
+
+export type TopSupporter = {
+  displayName: string;
+  amount: number;
+  currency: string;
+  supportedAt: string;
+};
+
+/** Public top supporters for a research project (completed tips). */
+export async function listTopSupporters(
+  researchProjectId: string,
+): Promise<TopSupporter[]> {
+  const res = await apiFetch<{ supporters: TopSupporter[] }>(
+    `/api/support?researchProjectId=${encodeURIComponent(researchProjectId)}&view=supporters`,
+  );
+  return (res.supporters ?? []).slice(0, 5);
+}

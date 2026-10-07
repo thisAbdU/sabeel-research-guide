@@ -42,13 +42,13 @@ async function ensureProjectForConversation(
   if (!conv) return { error: 'Conversation not found', status: 404 }
   if (conv.research_project_id) return { projectId: conv.research_project_id }
 
-  const title = (conv.title?.trim() || 'Funding research draft').slice(0, 300)
+  const title = (conv.title?.trim() || 'Funding research').slice(0, 300)
   const { data: project, error: createError } = await auth.supabase
     .from('research_projects')
     .insert({
       user_id: auth.user.id,
       title,
-      description: 'Draft created while saving funder matches from Get Funding.',
+      description: 'Created while saving funder matches from Get Funding.',
       keywords: [],
       is_published: false,
     })

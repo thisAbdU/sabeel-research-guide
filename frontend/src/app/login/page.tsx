@@ -77,7 +77,7 @@ export default function LoginPage() {
           </span>
         </Link>
         <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-          Sign in to access your research sessions, drafts, and support settings.
+          Sign in to access your research sessions, saved funders, and support settings.
         </p>
       </div>
 

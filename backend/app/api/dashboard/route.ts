@@ -2,6 +2,7 @@ import { requireUser } from '@/lib/auth'
 import { error, json, options } from '@/lib/http'
 import { toFundingMatch, toResearchProject } from '@/lib/mappers'
 import { readSupportEnabled, RESEARCH_COLUMNS } from '@/lib/research'
+import { aggregateTopSupporters } from '@/lib/support'
 
 export function OPTIONS() {
   return options()
@@ -30,9 +31,13 @@ export async function GET(request: Request) {
       .order('created_at', { ascending: false }),
     auth.supabase
       .from('support_transactions')
-      .select('amount, currency, status, research_projects!inner(user_id)')
+      .select(
+        'supporter_name, is_anonymous, amount, currency, status, verified_at, created_at, research_projects!inner(user_id)',
+      )
       .eq('research_projects.user_id', userId)
-      .eq('status', 'completed'),
+      .eq('status', 'completed')
+      .order('amount', { ascending: false })
+      .limit(100),
   ])
 
   if (projectsError) return error(projectsError.message, 500)
@@ -41,7 +46,7 @@ export async function GET(request: Request) {
 
   const list = projects ?? []
   const published = list.filter((row) => row.is_published)
-  const drafts = list.filter((row) => !row.is_published)
+  const privateProjects = list.filter((row) => !row.is_published)
   const tipsTotal = (tipRows ?? []).reduce((sum, row) => sum + Number(row.amount || 0), 0)
   const tipsCurrency = (tipRows ?? [])[0]?.currency?.toUpperCase() || 'ETB'
   const fundingMatches = (fundingRows ?? []).map((row) => {
@@ -51,12 +56,13 @@ export async function GET(request: Request) {
       researchTitle: project?.title ?? null,
     }
   })
+  const topSupporters = aggregateTopSupporters(tipRows ?? [], 5)
 
   return json({
     data: {
       stats: {
         publishedWorks: published.length,
-        draftIdeas: drafts.length,
+        privateProjects: privateProjects.length,
         fundingMatches: fundingMatches.length,
         tipsReceived: tipsTotal,
         tipsCurrency,
@@ -65,6 +71,7 @@ export async function GET(request: Request) {
         toResearchProject(row, readSupportEnabled(row.support_settings)),
       ),
       fundingMatches,
+      topSupporters,
     },
   })
 }

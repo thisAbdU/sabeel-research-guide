@@ -377,3 +377,44 @@ export function sanitizeSupporterName(name: string | null | undefined, anonymous
   if (!trimmed) return null
   return trimmed.slice(0, 80)
 }
+
+export type TopSupporterRow = {
+  supporter_name?: string | null
+  is_anonymous?: boolean | null
+  amount: number | string
+  currency: string
+  verified_at?: string | null
+  created_at: string
+}
+
+/** Aggregate completed tips into a public top-supporters leaderboard. */
+export function aggregateTopSupporters(rows: TopSupporterRow[], limit = 5) {
+  const byKey = new Map<
+    string,
+    { displayName: string; amount: number; currency: string; supportedAt: string }
+  >()
+
+  for (const row of rows) {
+    const anonymous = !!row.is_anonymous || !row.supporter_name?.trim()
+    const displayName = anonymous ? 'Anonymous' : row.supporter_name!.trim()
+    const key = anonymous ? `anon:${row.created_at}:${row.amount}` : displayName.toLowerCase()
+    const amount = Number(row.amount) || 0
+    const supportedAt = row.verified_at ?? row.created_at
+    const existing = byKey.get(key)
+    if (existing) {
+      existing.amount += amount
+      if (supportedAt > existing.supportedAt) existing.supportedAt = supportedAt
+    } else {
+      byKey.set(key, {
+        displayName,
+        amount,
+        currency: (row.currency || 'ETB').toUpperCase(),
+        supportedAt,
+      })
+    }
+  }
+
+  return Array.from(byKey.values())
+    .sort((a, b) => b.amount - a.amount || b.supportedAt.localeCompare(a.supportedAt))
+    .slice(0, limit)
+}

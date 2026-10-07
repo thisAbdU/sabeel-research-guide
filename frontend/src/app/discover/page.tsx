@@ -8,6 +8,7 @@ import {
   BookOpen,
   Sparkles,
   MapPin,
+  Trophy,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +16,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { apiFetch } from "@/lib/api";
 import { DISCOVER_FIELDS } from "@/lib/discover-fields";
 import { SupportModal } from "@/components/discover/SupportModal";
+import type { TopSupporter } from "@/services/funding";
 
 interface DiscoverResearch {
   id: string;
@@ -29,6 +31,7 @@ interface DiscoverResearch {
   institution: string | null;
   location: string | null;
   supportEnabled: boolean;
+  topSupporters?: TopSupporter[];
 }
 
 interface DiscoverApiResponse {
@@ -271,10 +274,38 @@ export default function DiscoverPage() {
                   )}
                 </CardHeader>
 
-                <CardContent className="pt-0 pb-3">
+                <CardContent className="pt-0 pb-3 space-y-3">
                   <div className="rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 text-xs leading-relaxed text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400 line-clamp-4">
                     {item.description || "No description provided."}
                   </div>
+
+                  {item.topSupporters && item.topSupporters.length > 0 && (
+                    <div className="rounded-xl border border-zinc-100 px-3 py-2.5 dark:border-zinc-800">
+                      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                        <Trophy className="h-3 w-3 text-amber-500" />
+                        Top supporters
+                      </div>
+                      <ul className="mt-1.5 space-y-1">
+                        {item.topSupporters.slice(0, 5).map((s, i) => (
+                          <li
+                            key={`${item.id}-${s.displayName}-${i}`}
+                            className="flex items-center justify-between gap-2 text-[11px]"
+                          >
+                            <span className="truncate text-zinc-700 dark:text-zinc-300">
+                              <span className="mr-1 font-mono text-[10px] text-zinc-400">
+                                {i + 1}.
+                              </span>
+                              {s.displayName}
+                            </span>
+                            <span className="shrink-0 font-medium tabular-nums text-zinc-900 dark:text-zinc-100">
+                              {Number.isInteger(s.amount) ? s.amount : s.amount.toFixed(2)}{" "}
+                              {s.currency.toUpperCase()}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </CardContent>
 
                 <CardFooter className="mt-auto flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800/80">

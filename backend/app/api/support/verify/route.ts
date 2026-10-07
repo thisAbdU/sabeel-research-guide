@@ -123,10 +123,11 @@ export async function POST(request: Request) {
     } else {
       const { status, data } = await verifyReceipt(
         url ? { url } : { reference: reference! },
-        { idempotencyKey: paymentId },
+        { idempotencyKey: paymentId, awaitMs: 90_000 },
       )
       upstreamStatus = status
 
+      // Still queued after await — tell the client to retry verify (idempotent).
       if (status === 202 || ('processingStatus' in data && !('ok' in data && data.ok))) {
         return json(
           {
@@ -134,6 +135,7 @@ export async function POST(request: Request) {
               paymentId,
               status: 'processing',
               requestId: 'requestId' in data ? data.requestId : null,
+              retryable: true,
             },
           },
           202,

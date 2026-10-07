@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Coffee, Copy, Loader2, Upload, X } from "lucide-react";
+import { Coffee, Copy, Loader2, Trophy, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/api";
+import { listTopSupporters, type TopSupporter } from "@/services/funding";
 
 type CheckoutMethod = {
   provider: string;
@@ -34,6 +35,8 @@ export function SupportModal({
   const [busy, setBusy] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [supporters, setSupporters] = React.useState<TopSupporter[]>([]);
+  const [supportersLoading, setSupportersLoading] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
@@ -46,6 +49,22 @@ export function SupportModal({
     setReceiptUrl("");
     setStatus(null);
     setError(null);
+    setSupporters([]);
+    setSupportersLoading(true);
+    let cancelled = false;
+    void listTopSupporters(researchId)
+      .then((list) => {
+        if (!cancelled) setSupporters(list);
+      })
+      .catch(() => {
+        if (!cancelled) setSupporters([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSupportersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, researchId]);
 
   if (!open) return null;
@@ -90,20 +109,34 @@ export function SupportModal({
     if (!paymentId) return;
     setBusy(true);
     setError(null);
+    setStatus("Verifying receipt…");
     try {
-      const res = await apiFetch<{
-        data: { status: string };
-      }>("/api/support/verify", {
-        method: "POST",
-        body: JSON.stringify({ paymentId, ...payload }),
-      });
-      if (res.data.status === "successful" || res.data.status === "completed") {
-        setStatus("Payment verified. Thank you for supporting this research!");
-      } else {
-        setStatus(`Verification status: ${res.data.status}`);
+      // links.et may return 202 while the bank fetch finishes; retry a few times.
+      let lastStatus = "processing";
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const res = await apiFetch<{
+          data: { status: string; error?: string; retryable?: boolean };
+        }>("/api/support/verify", {
+          method: "POST",
+          body: JSON.stringify({ paymentId, ...payload }),
+        });
+        lastStatus = res.data.status;
+        if (lastStatus === "successful" || lastStatus === "completed") {
+          setStatus("Payment verified. Thank you for supporting this research!");
+          return;
+        }
+        if (lastStatus !== "processing") {
+          setError(res.data.error || `Verification ${lastStatus}`);
+          setStatus(null);
+          return;
+        }
+        setStatus("Still verifying with the bank…");
+        await new Promise((r) => setTimeout(r, 2000));
       }
+      setStatus(`Verification status: ${lastStatus}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
+      setStatus(null);
     } finally {
       setBusy(false);
     }
@@ -149,6 +182,39 @@ export function SupportModal({
 
         {!paymentId ? (
           <div className="mt-4 space-y-3">
+            {(supportersLoading || supporters.length > 0) && (
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/40">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                  <Trophy className="h-3 w-3 text-amber-500" />
+                  Top supporters
+                </div>
+                {supportersLoading ? (
+                  <div className="mt-2 flex justify-center py-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400" />
+                  </div>
+                ) : (
+                  <ul className="mt-2 space-y-1.5">
+                    {supporters.map((s, i) => (
+                      <li
+                        key={`${s.displayName}-${i}`}
+                        className="flex items-center justify-between gap-2 text-xs"
+                      >
+                        <span className="truncate text-zinc-700 dark:text-zinc-300">
+                          <span className="mr-1.5 font-mono text-[10px] text-zinc-400">
+                            {i + 1}.
+                          </span>
+                          {s.displayName}
+                        </span>
+                        <span className="shrink-0 font-medium tabular-nums text-zinc-900 dark:text-zinc-100">
+                          {Number.isInteger(s.amount) ? s.amount : s.amount.toFixed(2)}{" "}
+                          {s.currency.toUpperCase()}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             <label className="block text-xs font-medium text-zinc-600">
               Amount (ETB)
               <input
