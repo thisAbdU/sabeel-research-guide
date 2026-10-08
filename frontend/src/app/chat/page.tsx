@@ -25,6 +25,7 @@ import { useChat } from "@/context/ChatContext";
 import { useVoicePipeline } from "@/hooks/useVoicePipeline";
 import { LiveVoiceOrb } from "@/components/chat/LiveVoiceOrb";
 import { PublishOfferModal } from "@/components/chat/PublishOfferModal";
+import { VoxideKeyReplacementModal } from "@/components/chat/VoxideKeyReplacementModal";
 import {
   funderKey,
   listFundingMatches,
@@ -387,8 +388,14 @@ function ChatPageInner() {
                   transcript={voice.liveTranscript}
                   transcriptRole={voice.transcriptRole}
                   errorCode={voice.errorCode}
+                  errorReason={voice.errorReason}
+                  errorMessage={voice.errorMessage}
+                  onReplaceKey={voice.replaceKey}
                   onRetry={() => {
                     void voice.connect();
+                  }}
+                  onClose={() => {
+                    voice.disconnect();
                   }}
                 />
               </div>
@@ -522,6 +529,14 @@ function ChatPageInner() {
           onPublished={() => {
             clearPublishOffer();
           }}
+        />
+
+        <VoxideKeyReplacementModal
+          open={voice.isCreditExpired}
+          onClose={() => {
+            voice.dismissCreditError();
+          }}
+          onReplaceKey={voice.replaceKey}
         />
       </div>
     </AppShell>

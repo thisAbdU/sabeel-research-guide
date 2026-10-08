@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { RotateCcw } from "lucide-react";
-import type { VoicePhase } from "@/hooks/useVoicePipeline";
+import type { VoicePhase, VoiceErrorReason } from "@/hooks/useVoicePipeline";
+import { VoxideKeyReplacementCard } from "./VoxideKeyReplacementCard";
 
 interface LiveVoiceOrbProps {
   phase: VoicePhase;
@@ -11,7 +12,11 @@ interface LiveVoiceOrbProps {
   transcript?: string;
   transcriptRole?: "user" | "ai" | null;
   errorCode?: string | null;
+  errorReason?: VoiceErrorReason | null;
+  errorMessage?: string | null;
   onRetry?: () => void;
+  onReplaceKey?: (newKey: string) => Promise<{ success: boolean; error?: string }>;
+  onClose?: () => void;
   className?: string;
 }
 
@@ -22,7 +27,11 @@ export function LiveVoiceOrb({
   transcript,
   transcriptRole = null,
   errorCode,
+  errorReason,
+  errorMessage,
   onRetry,
+  onReplaceKey,
+  onClose,
   className = "",
 }: LiveVoiceOrbProps) {
   const outerGlowRef = React.useRef<HTMLDivElement>(null);
@@ -32,9 +41,9 @@ export function LiveVoiceOrb({
   const animFrameRef = React.useRef<number | null>(null);
   const smoothedLevelRef = React.useRef<number>(0);
 
-  React.useEffect(() => {
-    const isAudioActive = phase === "listening" || phase === "responding";
+  const isAudioActive = phase === "listening" || phase === "responding";
 
+  React.useEffect(() => {
     if (!isAudioActive) {
       if (animFrameRef.current !== null) {
         cancelAnimationFrame(animFrameRef.current);
@@ -91,18 +100,26 @@ export function LiveVoiceOrb({
         animFrameRef.current = null;
       }
     };
-  }, [phase, getInputLevel, getOutputLevel]);
+  }, [phase, isAudioActive, getInputLevel, getOutputLevel]);
 
   const isThinking = phase === "thinking" || phase === "processing";
-  const isError = phase === "error" || Boolean(errorCode);
-  const isLimit =
-    errorCode === "usage_limit" || (errorCode && errorCode.toLowerCase().includes("limit"));
+  const isCreditExpired =
+    errorReason === "credits_expired" ||
+    errorCode === "usage_limit" ||
+    Boolean(errorCode && errorCode.toLowerCase().includes("limit"));
+  const isError = phase === "error" || Boolean(errorCode) || Boolean(errorReason);
 
-  // Status caption
-  const statusLabel = isLimit
-    ? "Voxide usage limit reached"
+  // Status caption resolution
+  const statusLabel = isCreditExpired
+    ? "Voice credits expired"
+    : errorReason === "microphone_permission"
+    ? "Microphone access blocked"
+    : errorReason === "microphone_not_found"
+    ? "Microphone not detected"
+    : errorReason === "network"
+    ? "Network issue"
     : isError
-    ? "Voice connection error"
+    ? "Voice connection issue"
     : phase === "listening"
     ? "Listening…"
     : isThinking
@@ -113,16 +130,18 @@ export function LiveVoiceOrb({
 
   return (
     <div
-      className={`relative flex flex-col items-center justify-center select-none py-2 ${className}`}
+      className={`relative flex flex-col items-center justify-center select-none py-2 w-full max-w-lg mx-auto ${className}`}
       aria-label="Live Voice Status"
     >
       {/* Orb Visualizer Frame */}
-      <div className="relative flex items-center justify-center w-28 h-28 sm:w-32 sm:h-32">
+      <div className="relative flex items-center justify-center w-28 h-28 sm:w-32 sm:h-32 shrink-0">
         {/* Soft outer atmospheric glow halo */}
         <div
           ref={outerGlowRef}
           className={`absolute inset-0 rounded-full blur-xl transition-all duration-300 pointer-events-none ${
-            isError
+            isCreditExpired
+              ? "bg-indigo-500/20 dark:bg-indigo-500/15"
+              : isError
               ? "bg-red-500/25 dark:bg-red-500/20"
               : isThinking
               ? "bg-indigo-400/35 dark:bg-indigo-500/30 animate-pulse"
@@ -134,7 +153,9 @@ export function LiveVoiceOrb({
         <div
           ref={midAuraRef}
           className={`absolute inset-1.5 rounded-full transition-all duration-300 pointer-events-none ${
-            isError
+            isCreditExpired
+              ? "border border-zinc-300/40 dark:border-zinc-700/50 bg-zinc-500/5 dark:bg-zinc-800/20"
+              : isError
               ? "border border-red-400/30 bg-red-500/10"
               : isThinking
               ? "border border-indigo-400/40 bg-indigo-500/10 animate-ping [animation-duration:3s]"
@@ -166,6 +187,8 @@ export function LiveVoiceOrb({
                   ? "opacity-100 animate-pulse"
                   : isThinking
                   ? "opacity-80 animate-pulse"
+                  : isCreditExpired
+                  ? "opacity-40"
                   : "opacity-20"
               }`}
             />
@@ -173,40 +196,53 @@ export function LiveVoiceOrb({
         </div>
       </div>
 
-      {/* Dynamic Status Typography & Live Transcription */}
-      <div className="mt-1.5 flex flex-col items-center text-center max-w-sm px-3">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 flex items-center gap-1.5">
-          {phase === "listening" && (
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+      {/* When credit expired, present the full Key Replacement Card */}
+      {isCreditExpired && onReplaceKey ? (
+        <div className="w-full mt-3 animate-fadeIn px-2 sm:px-4">
+          <VoxideKeyReplacementCard
+            onReplaceKey={onReplaceKey}
+            onSuccess={() => {
+              onRetry?.();
+            }}
+            onDismiss={onClose}
+          />
+        </div>
+      ) : (
+        /* Dynamic Status Typography & Live Transcription for standard phases */
+        <div className="mt-1.5 flex flex-col items-center text-center max-w-sm px-3">
+          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 flex items-center gap-1.5">
+            {phase === "listening" && (
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+            )}
+            {statusLabel}
+          </span>
+
+          {/* Live captions: user while listening, assistant while TTS plays */}
+          {transcript && (
+            <p
+              className={`mt-1.5 text-xs font-medium animate-fadeIn max-w-sm ${
+                transcriptRole === "ai"
+                  ? "text-zinc-700 dark:text-zinc-200 not-italic line-clamp-4 text-left"
+                  : "text-zinc-800 dark:text-zinc-200 italic truncate max-w-xs"
+              }`}
+            >
+              {transcriptRole === "ai" ? transcript : `\u201C${transcript}\u201D`}
+            </p>
           )}
-          {statusLabel}
-        </span>
 
-        {/* Live captions: user while listening, assistant while TTS plays */}
-        {transcript && (
-          <p
-            className={`mt-1.5 text-xs font-medium animate-fadeIn max-w-sm ${
-              transcriptRole === "ai"
-                ? "text-zinc-700 dark:text-zinc-200 not-italic line-clamp-4 text-left"
-                : "text-zinc-800 dark:text-zinc-200 italic truncate max-w-xs"
-            }`}
-          >
-            {transcriptRole === "ai" ? transcript : `\u201C${transcript}\u201D`}
-          </p>
-        )}
-
-        {/* Error Retry Affordance */}
-        {isError && onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
-          >
-            <RotateCcw className="h-3 w-3" />
-            <span>Retry Connection</span>
-          </button>
-        )}
-      </div>
+          {/* Standard Error Retry Affordance (for non-credit issues like network blips) */}
+          {isError && !isCreditExpired && onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+            >
+              <RotateCcw className="h-3 w-3" />
+              <span>Retry Connection</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

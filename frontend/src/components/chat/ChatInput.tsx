@@ -234,13 +234,17 @@ export function ChatInput({
               type="button"
               title={
                 !voiceAvailable
-                  ? "Set VOXIDE_PUBLIC_KEY to enable voice"
+                  ? "Provide a Voxide public key to enable live voice"
                   : "Start live voice conversation"
               }
-              disabled={!voiceAvailable || disabled}
+              disabled={disabled}
               onClick={onToggleVoice}
               aria-pressed={voiceActive}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                !voiceAvailable
+                  ? "text-zinc-400 hover:text-amber-600 hover:bg-amber-500/10 dark:hover:text-amber-400"
+                  : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              }`}
             >
               <Mic className="h-4 w-4" />
             </button>

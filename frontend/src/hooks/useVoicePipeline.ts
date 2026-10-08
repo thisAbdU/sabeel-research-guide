@@ -2,7 +2,14 @@
 
 import * as React from "react";
 import { useVoxideVoice, type VoxideClient, type VoxideStatus } from "@voxide/react";
-import { getVoxideClient, fetchVoxideClient } from "@/lib/voxide";
+import {
+  getVoxideClient,
+  fetchVoxideClient,
+  setRuntimeVoxideKey,
+  clearRuntimeVoxideKey,
+  isValidVoxidePublicKey,
+  getActiveVoxideKey,
+} from "@/lib/voxide";
 import type { ChatMode } from "@/types/chat";
 
 /** Person 1 UI states — mapped from verified Voxide statuses only. */
@@ -13,6 +20,16 @@ export type VoicePhase =
   | "thinking"
   | "responding"
   | "error";
+
+/** Normalized voice error reasons distinguishing credit/key issues from environment/network failures. */
+export type VoiceErrorReason =
+  | "credits_expired"
+  | "invalid_key"
+  | "microphone_permission"
+  | "microphone_not_found"
+  | "network"
+  | "service_unavailable"
+  | "unknown";
 
 /** Grace period after TTS so speaker bleed doesn't get transcribed as the user. */
 const MIC_UNMUTE_GRACE_MS = 450;
@@ -38,6 +55,96 @@ export function mapVoicePhase(status: VoxideStatus): VoicePhase {
 }
 
 /**
+ * Normalizes SDK errors, HTTP codes, and WebSocket events into a structured VoiceErrorReason.
+ */
+export function classifyVoiceError(error: unknown, errorCode?: string | null): VoiceErrorReason {
+  if (errorCode) {
+    const lowerCode = errorCode.toLowerCase();
+    if (
+      lowerCode === "usage_limit" ||
+      lowerCode.includes("usage_limit") ||
+      lowerCode.includes("quota") ||
+      lowerCode.includes("credit") ||
+      lowerCode.includes("limit") ||
+      lowerCode.includes("billing")
+    ) {
+      return "credits_expired";
+    }
+  }
+
+  if (!error) {
+    return "unknown";
+  }
+
+  const rawMsg =
+    typeof error === "string"
+      ? error
+      : (error as { message?: string })?.message || String(error);
+  const rawCode = (error as { code?: string | number })?.code
+    ? String((error as { code?: string | number }).code).toLowerCase()
+    : "";
+  const combined = `${rawMsg} ${rawCode}`.toLowerCase();
+
+  // Credit / Quota / Billing / Unauthorized key failures
+  if (
+    combined.includes("usage_limit") ||
+    combined.includes("credit") ||
+    combined.includes("quota") ||
+    combined.includes("billing") ||
+    combined.includes("payment") ||
+    combined.includes("exceeded") ||
+    combined.includes("401") ||
+    combined.includes("402") ||
+    combined.includes("403") ||
+    combined.includes("unauthorized") ||
+    combined.includes("forbidden") ||
+    combined.includes("revoked")
+  ) {
+    return "credits_expired";
+  }
+
+  if (combined.includes("invalid key") || combined.includes("malformed") || combined.includes("bad public key")) {
+    return "invalid_key";
+  }
+
+  // Microphone permissions
+  if (
+    combined.includes("permission") ||
+    combined.includes("notallowed") ||
+    combined.includes("denied")
+  ) {
+    return "microphone_permission";
+  }
+
+  // Microphone hardware not found
+  if (
+    combined.includes("notfound") ||
+    combined.includes("device") ||
+    combined.includes("no audio input")
+  ) {
+    return "microphone_not_found";
+  }
+
+  // Network / WebSocket
+  if (
+    combined.includes("network") ||
+    combined.includes("offline") ||
+    combined.includes("failed to fetch") ||
+    combined.includes("websocket") ||
+    combined.includes("econnrefused")
+  ) {
+    return "network";
+  }
+
+  // Service unavailable
+  if (combined.includes("500") || combined.includes("503") || combined.includes("service unavailable")) {
+    return "service_unavailable";
+  }
+
+  return "unknown";
+}
+
+/**
  * Half-duplex mic gate. Voxide keeps sending audio_input while TTS plays;
  * laptop speaker bleed then barge-ins and re-transcribes the assistant.
  * Muting tracks sends silence over the WS instead.
@@ -54,7 +161,7 @@ type SendThroughChat = (content: string) => Promise<string | null>;
 
 /**
  * Person 2 pipeline: mic → Voxide (STT) → text → existing chat workflow →
- * reply text → Voxide (TTS). Does not claim unverified language packs.
+ * reply text → Voxide (TTS).
  *
  * Half-duplex while the assistant is working/speaking (ChatGPT-style):
  * mic off until TTS finishes or the user interrupts.
@@ -68,6 +175,11 @@ export function useVoicePipeline(options: {
 }) {
   const [client, setClient] = React.useState<ReturnType<typeof getVoxideClient>>(() => getVoxideClient());
   const voice = useVoxideVoice(client);
+
+  // Sticky state for credit expired dialog: does not auto-dismiss when WS closes
+  const [creditExpired, setCreditExpired] = React.useState(false);
+  const [errorReason, setErrorReason] = React.useState<VoiceErrorReason | null>(null);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!client) {
@@ -138,7 +250,6 @@ export function useVoicePipeline(options: {
     });
 
     // Drop echo-triggered tool calls while the assistant turn is in flight.
-    // Register once per client instance (effect may re-run; middlewares aren't removable).
     const gated = client as VoxideClient & { __echoGate?: boolean };
     if (!gated.__echoGate) {
       gated.__echoGate = true;
@@ -232,10 +343,23 @@ export function useVoicePipeline(options: {
       console.warn("[voxide] manifest extract error:", err);
     }
 
-    // 4. Initialize client
-    client.init().catch((err: unknown) => {
-      if (!cancelled) console.error("[voxide] init failed", err);
-    });
+    // 4. Initialize client and trap credit/auth errors specifically
+    client
+      .init()
+      .then(() => {
+        // Do not clear creditExpired here if already flagged
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const reason = classifyVoiceError(err);
+          setErrorReason(reason);
+          if (reason === "credits_expired") {
+            setCreditExpired(true);
+          }
+          setErrorMessage(err instanceof Error ? err.message : String(err));
+          console.warn("[voxide] init error classified as:", reason);
+        }
+      });
 
     client.setActiveRoute("/chat");
     client.bindState(() => ({
@@ -275,11 +399,28 @@ export function useVoicePipeline(options: {
       }
     );
 
+    // 6. Capture runtime error events from SDK WebSocket / server
+    const unsubErr = client.on("error", (errPayload: any) => {
+      if (!cancelled) {
+        const reason = classifyVoiceError(errPayload, voice.errorCode);
+        setErrorReason(reason);
+        if (reason === "credits_expired") {
+          setCreditExpired(true);
+        }
+        setErrorMessage(
+          typeof errPayload === "string"
+            ? errPayload
+            : errPayload?.message || "Voice service error"
+        );
+      }
+    });
+
     return () => {
       cancelled = true;
       clearUnmuteTimer();
       unsubTranscript?.();
       unsubMsg?.();
+      unsubErr?.();
       client.unregister("askResearchCompanion");
       assistantBusyRef.current = false;
     };
@@ -293,7 +434,19 @@ export function useVoicePipeline(options: {
     });
   }, [client, options.userId, options.userEmail]);
 
-  const phase = mapVoicePhase(voice.status);
+  // Keep errorReason in sync with voice.errorCode
+  React.useEffect(() => {
+    if (voice.errorCode) {
+      const reason = classifyVoiceError(null, voice.errorCode);
+      setErrorReason(reason);
+      if (reason === "credits_expired") {
+        setCreditExpired(true);
+      }
+    }
+  }, [voice.errorCode]);
+
+  const rawPhase = mapVoicePhase(voice.status);
+  const phase: VoicePhase = (creditExpired || errorReason) ? "error" : rawPhase;
   const [sessionActive, setSessionActive] = React.useState(false);
 
   React.useEffect(() => {
@@ -306,12 +459,15 @@ export function useVoicePipeline(options: {
     ) {
       setSessionActive(true);
     } else if (voice.status === "idle") {
-      setSessionActive(false);
-      assistantBusyRef.current = false;
-      setLiveTranscript("");
-      setTranscriptRole(null);
+      // Don't close session panel immediately if credits expired so user can replace key
+      if (!creditExpired && errorReason !== "credits_expired") {
+        setSessionActive(false);
+        assistantBusyRef.current = false;
+        setLiveTranscript("");
+        setTranscriptRole(null);
+      }
     }
-  }, [voice.status]);
+  }, [voice.status, errorReason, creditExpired]);
 
   // Half-duplex: only capture mic while actively listening for the user.
   React.useEffect(() => {
@@ -338,7 +494,11 @@ export function useVoicePipeline(options: {
     }
   }, [client, sessionActive, voice.status, muteMic, unmuteMic]);
 
-  const isSessionOpen = sessionActive || (voice.status !== "idle" && voice.status !== "armed");
+  const isSessionOpen =
+    sessionActive ||
+    (voice.status !== "idle" && voice.status !== "armed") ||
+    creditExpired ||
+    errorReason === "credits_expired";
 
   const disconnect = React.useCallback(() => {
     setSessionActive(false);
@@ -350,20 +510,53 @@ export function useVoicePipeline(options: {
     voice.disconnect();
   }, [voice, client, clearUnmuteTimer]);
 
-  const connect = React.useCallback(async () => {
+  const dismissCreditError = React.useCallback(() => {
+    setCreditExpired(false);
+    setErrorReason(null);
+    setErrorMessage(null);
+    disconnect();
+  }, [disconnect]);
+
+  const openKeyModal = React.useCallback(() => {
+    setCreditExpired(true);
+    setErrorReason("credits_expired");
     setSessionActive(true);
-    assistantBusyRef.current = false;
-    await voice.connect();
-  }, [voice]);
+  }, []);
+
+  const connect = React.useCallback(async () => {
+    if (!client) {
+      openKeyModal();
+      return;
+    }
+    try {
+      setSessionActive(true);
+      assistantBusyRef.current = false;
+
+      if (!client.isInitialized) {
+        await client.init();
+      }
+      await voice.connect();
+    } catch (err: unknown) {
+      const reason = classifyVoiceError(err, voice.errorCode);
+      setErrorReason(reason);
+      if (reason === "credits_expired") {
+        setCreditExpired(true);
+      }
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }, [client, voice, openKeyModal]);
 
   const toggle = React.useCallback(async () => {
-    if (!client) return;
-    if (isSessionOpen) {
+    if (!client || !getActiveVoxideKey()) {
+      openKeyModal();
+      return;
+    }
+    if (isSessionOpen && !creditExpired) {
       disconnect();
       return;
     }
     await connect();
-  }, [client, isSessionOpen, disconnect, connect]);
+  }, [client, isSessionOpen, creditExpired, disconnect, connect, openKeyModal]);
 
   const interrupt = React.useCallback(() => {
     // Stop TTS and open the mic immediately (user barge-in).
@@ -383,6 +576,59 @@ export function useVoicePipeline(options: {
     return typeof voice.getOutputLevel === "function" ? voice.getOutputLevel() : 0;
   }, [voice]);
 
+  /**
+   * Replaces the current Voxide public key at runtime with seamless re-initialization.
+   */
+  const replaceKey = React.useCallback(
+    async (newKey: string): Promise<{ success: boolean; error?: string }> => {
+      const trimmed = newKey.trim();
+      if (!isValidVoxidePublicKey(trimmed)) {
+        return {
+          success: false,
+          error: "That doesn't look like a valid Voxide public API key.",
+        };
+      }
+
+      try {
+        if (voice.status !== "idle") {
+          voice.disconnect();
+        }
+
+        const freshClient = setRuntimeVoxideKey(trimmed);
+        setClient(freshClient);
+        setCreditExpired(false);
+        setErrorReason(null);
+        setErrorMessage(null);
+        setSessionActive(true);
+
+        await freshClient.init();
+        // Immediately trigger connection with the fresh key
+        await freshClient.connect();
+        return { success: true };
+      } catch (err: unknown) {
+        const reason = classifyVoiceError(err);
+        setErrorReason(reason);
+        if (reason === "credits_expired") {
+          setCreditExpired(true);
+        }
+        const msg = err instanceof Error ? err.message : "Failed to initialize key";
+        setErrorMessage(msg);
+        return { success: false, error: msg };
+      }
+    },
+    [voice]
+  );
+
+  const clearKey = React.useCallback(() => {
+    clearRuntimeVoxideKey();
+    setClient(null);
+    setCreditExpired(false);
+    setErrorReason(null);
+    disconnect();
+  }, [disconnect]);
+
+  const isCreditExpired = creditExpired || errorReason === "credits_expired" || voice.errorCode === "usage_limit";
+
   return {
     available: Boolean(client),
     status: voice.status,
@@ -391,6 +637,9 @@ export function useVoicePipeline(options: {
     transcriptRole,
     currentAction: voice.currentAction,
     errorCode: voice.errorCode,
+    errorReason,
+    errorMessage,
+    isCreditExpired,
     isSessionOpen,
     connect,
     disconnect,
@@ -398,5 +647,9 @@ export function useVoicePipeline(options: {
     getInputLevel,
     getOutputLevel,
     toggle,
+    replaceKey,
+    clearKey,
+    openKeyModal,
+    dismissCreditError,
   };
 }

@@ -1,14 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeft, Square, RotateCcw, X, AlertCircle } from "lucide-react";
-import type { VoicePhase } from "@/hooks/useVoicePipeline";
+import { ArrowLeft, Square, RotateCcw, X } from "lucide-react";
+import type { VoicePhase, VoiceErrorReason } from "@/hooks/useVoicePipeline";
 import type { ChatMode } from "@/types/chat";
 import { LiveVoiceOrb } from "./LiveVoiceOrb";
 
 interface LiveVoiceModeProps {
   phase: VoicePhase;
   errorCode?: string | null;
+  errorReason?: VoiceErrorReason | null;
+  errorMessage?: string | null;
   mode: ChatMode;
   modeTitle?: string;
   getInputLevel?: () => number;
@@ -16,41 +18,55 @@ interface LiveVoiceModeProps {
   onInterrupt: () => void;
   onExit: () => void;
   onRetry: () => void;
+  onReplaceKey?: (newKey: string) => Promise<{ success: boolean; error?: string }>;
 }
 
-function resolveErrorMessage(errorCode?: string | null): { title: string; hint: string } {
-  if (!errorCode) {
+function resolveErrorMessage(
+  errorCode?: string | null,
+  errorReason?: VoiceErrorReason | null
+): { title: string; hint: string } {
+  if (
+    errorReason === "credits_expired" ||
+    errorCode === "usage_limit" ||
+    Boolean(errorCode && errorCode.toLowerCase().includes("limit"))
+  ) {
     return {
-      title: "Voice connection issue",
-      hint: "The voice session encountered an unexpected issue. Please retry.",
-    };
-  }
-  const lower = errorCode.toLowerCase();
-  if (lower === "usage_limit" || lower.includes("usage_limit") || lower.includes("limit")) {
-    return {
-      title: "Voxide Usage Limit Reached",
-      hint: "Your Voxide project has reached its minute or session quota on the free tier. Check your project plan on the Voxide dashboard or provide a new VOXIDE_PUBLIC_KEY to continue.",
+      title: "Voice credits have expired",
+      hint: "Your Voxide voice credits are no longer available. Create a new Voxide API key and paste it below to continue using live voice.",
     };
   }
   if (
-    lower.includes("denied") ||
-    lower.includes("notallowed") ||
-    lower.includes("permission")
+    errorReason === "microphone_permission" ||
+    (errorCode &&
+      (errorCode.toLowerCase().includes("denied") ||
+        errorCode.toLowerCase().includes("notallowed") ||
+        errorCode.toLowerCase().includes("permission")))
   ) {
     return {
       title: "Microphone access blocked",
       hint: "Allow microphone permissions in your browser settings to continue the voice conversation.",
     };
   }
-  if (lower.includes("device") || lower.includes("notfound")) {
+  if (
+    errorReason === "microphone_not_found" ||
+    (errorCode &&
+      (errorCode.toLowerCase().includes("device") ||
+        errorCode.toLowerCase().includes("notfound")))
+  ) {
     return {
       title: "Microphone not found",
       hint: "No audio input device detected. Please connect a microphone and retry.",
     };
   }
+  if (errorReason === "network") {
+    return {
+      title: "Network connection issue",
+      hint: "Could not maintain live connection to the voice server. Please check your internet connection and retry.",
+    };
+  }
   return {
-    title: "Voice connection failed",
-    hint: "Could not maintain live connection to the voice server. Please try reconnecting.",
+    title: "Voice connection issue",
+    hint: "The voice session encountered an unexpected issue. Please retry.",
   };
 }
 
@@ -83,6 +99,8 @@ const PHASE_LABELS: Record<
 export function LiveVoiceMode({
   phase,
   errorCode,
+  errorReason,
+  errorMessage,
   mode,
   modeTitle,
   getInputLevel,
@@ -90,6 +108,7 @@ export function LiveVoiceMode({
   onInterrupt,
   onExit,
   onRetry,
+  onReplaceKey,
 }: LiveVoiceModeProps) {
   // Listen for Escape key to exit cleanly
   React.useEffect(() => {
@@ -102,8 +121,12 @@ export function LiveVoiceMode({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onExit]);
 
-  const isError = phase === "error";
-  const errorDetails = isError ? resolveErrorMessage(errorCode) : null;
+  const isCreditExpired =
+    errorReason === "credits_expired" ||
+    errorCode === "usage_limit" ||
+    Boolean(errorCode && errorCode.toLowerCase().includes("limit"));
+  const isError = phase === "error" || isCreditExpired;
+  const errorDetails = isError ? resolveErrorMessage(errorCode, errorReason) : null;
   const activeDetails = !isError ? PHASE_LABELS[phase] : null;
 
   const modeDisplayName =
@@ -146,41 +169,47 @@ export function LiveVoiceMode({
           </div>
 
           {/* Live Voice Status Badge */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-mono shrink-0">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 text-[11px] font-mono shrink-0">
             <span
               className={`h-1.5 w-1.5 rounded-full ${
-                isError ? "bg-red-500" : "bg-emerald-500 animate-pulse"
+                isCreditExpired ? "bg-zinc-400" : isError ? "bg-red-500" : "bg-emerald-500 animate-pulse"
               }`}
             />
-            <span>{isError ? "Error" : "Live Voice"}</span>
+            <span>{isCreditExpired ? "Credits Expired" : isError ? "Error" : "Live Voice"}</span>
           </div>
         </div>
 
         {/* Center Canvas: Live Acoustic Orb & Dynamic State Messaging */}
-        <div className="flex-1 flex flex-col items-center justify-center py-6 sm:py-8 text-center min-h-0">
+        <div className="flex-1 flex flex-col items-center justify-center py-6 sm:py-8 text-center min-h-0 overflow-y-auto">
           <LiveVoiceOrb
             phase={phase}
             getInputLevel={getInputLevel}
             getOutputLevel={getOutputLevel}
-            className="mb-6 sm:mb-8"
+            errorCode={errorCode}
+            errorReason={errorReason}
+            errorMessage={errorMessage}
+            onRetry={onRetry}
+            onReplaceKey={onReplaceKey}
+            onClose={onExit}
+            className="mb-4"
           />
 
-          {/* Human-Readable State Typography */}
-          <div className="space-y-1.5 max-w-md px-4">
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">
-              {isError ? errorDetails?.title : activeDetails?.title}
-            </h2>
-            <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
-              {isError ? errorDetails?.hint : activeDetails?.hint}
-            </p>
-          </div>
+          {/* Human-Readable State Typography (when not showing replacement card) */}
+          {!isCreditExpired && (
+            <div className="space-y-1.5 max-w-md px-4">
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">
+                {isError ? errorDetails?.title : activeDetails?.title}
+              </h2>
+              <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                {isError ? errorDetails?.hint : activeDetails?.hint}
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Bottom Control Hierarchy: Interruption, Retry, and Exit */}
+        {/* Bottom Control Hierarchy */}
         <div className="shrink-0 flex flex-col items-center gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800/80">
-          {/* Action Row */}
           <div className="flex items-center justify-center gap-3 w-full">
-            {/* When Assistant is Speaking: Prominent Stop Speaking / Interrupt button */}
             {phase === "responding" && (
               <button
                 type="button"
@@ -194,8 +223,7 @@ export function LiveVoiceMode({
               </button>
             )}
 
-            {/* When Error Encountered: Retry Button */}
-            {isError && (
+            {isError && !isCreditExpired && (
               <button
                 type="button"
                 onClick={onRetry}
@@ -207,24 +235,14 @@ export function LiveVoiceMode({
               </button>
             )}
 
-            {/* In listening or idle phases: Visual cue that microphone is open */}
             {phase === "listening" && (
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 text-xs font-medium">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
                 <span>Microphone open — speak whenever ready</span>
               </div>
             )}
-
-            {/* In thinking or processing: subtle notice */}
-            {(phase === "thinking" || phase === "processing") && (
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 text-xs font-medium">
-                <span className="h-2 w-2 rounded-full bg-zinc-400 dark:bg-zinc-500 animate-pulse" />
-                <span>Analyzing ScholarXiv literature…</span>
-              </div>
-            )}
           </div>
 
-          {/* Secondary Exit action */}
           <div className="flex items-center justify-center gap-2 pt-1">
             <button
               type="button"
