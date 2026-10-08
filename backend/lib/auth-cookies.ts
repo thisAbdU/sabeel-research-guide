@@ -1,7 +1,22 @@
-const ACCESS_TOKEN_COOKIE = "scholarxiv_access_token"
-const REFRESH_TOKEN_COOKIE = "scholarxiv_refresh_token"
+import { cookies } from "next/headers"
+
+export const ACCESS_TOKEN_COOKIE = "scholarxiv_access_token"
+export const REFRESH_TOKEN_COOKIE = "scholarxiv_refresh_token"
+
+const ACCESS_MAX_AGE = 60 * 60
+const REFRESH_MAX_AGE = 60 * 60 * 24 * 30
 
 const isProduction = process.env.NODE_ENV === "production"
+
+function cookieOptions(maxAge: number) {
+  return {
+    path: "/",
+    maxAge,
+    httpOnly: true,
+    sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
+    secure: isProduction,
+  }
+}
 
 function serializeCookie(
   name: string,
@@ -27,7 +42,7 @@ export function setAuthCookies(
     serializeCookie(
       ACCESS_TOKEN_COOKIE,
       accessToken,
-      60 * 60
+      ACCESS_MAX_AGE
     )
   )
 
@@ -36,9 +51,19 @@ export function setAuthCookies(
     serializeCookie(
       REFRESH_TOKEN_COOKIE,
       refreshToken,
-      60 * 60 * 24 * 30
+      REFRESH_MAX_AGE
     )
   )
+}
+
+/** Attach rotated tokens to the current Route Handler response (Next 15). */
+export async function persistAuthCookies(
+  accessToken: string,
+  refreshToken: string
+) {
+  const jar = await cookies()
+  jar.set(ACCESS_TOKEN_COOKIE, accessToken, cookieOptions(ACCESS_MAX_AGE))
+  jar.set(REFRESH_TOKEN_COOKIE, refreshToken, cookieOptions(REFRESH_MAX_AGE))
 }
 
 export function clearAuthCookies(response: Response) {
