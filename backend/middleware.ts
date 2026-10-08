@@ -26,10 +26,13 @@ export function middleware(request: NextRequest) {
   }
 
   const accessTokenCookie = request.cookies.get('scholarxiv_access_token')?.value
+  const refreshTokenCookie = request.cookies.get('scholarxiv_refresh_token')?.value
   const authHeader = request.headers.get('authorization')
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null
 
-  if (!accessTokenCookie && !bearerToken) {
+  // Access cookie expires in 1h; refresh lasts 30d. Allow refresh through so
+  // requireUser can rotate tokens instead of hard-401 before the route runs.
+  if (!accessTokenCookie && !bearerToken && !refreshTokenCookie) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
