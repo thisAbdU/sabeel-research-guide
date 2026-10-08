@@ -867,3 +867,74 @@ backend/app/api/dashboard/route.ts                |  15 +-
  tools/readmadeprompt.txt                          | 155 +++++++++
  17 files changed, 836 insertions(+), 154 deletions(-)
 ```
+
+
+################################################################################
+# 2026-10-08 16:57:52
+################################################################################
+
+You are writing a daily product changelog from git history.
+
+Current version: v1.9
+Repo: sabeel-research-guide
+
+Produce exactly three artifacts, in this order, nothing else:
+
+1) Version Tag
+   - Semver tag for this release (bump from current version).
+   - One line, e.g. v1.1
+
+2) Update Title
+   - One short public-facing title for this day's changes.
+
+3) changelog.md
+   - Markdown body only (no extra wrapping).
+   - User-facing: what changed, why it matters.
+   - Group as Added / Changed / Fixed when it fits.
+   - Skip noise (lockfiles, formatting-only, generated files) unless it changes behavior.
+
+Commit messages since last changelog:
+```
+e9bc1be fix: port backend
+d5ec27e feat: voxide fallback
+aee9f46 feat: voxide fallback
+95d1bd1 fix: use refresh token when access token expires
+2384fad feat: update readme
+071660f feat: add oct 7 changelog
+```
+
+Files changed (status + line counts). Use this instead of patches:
+```
+M	README.md
+M	backend/lib/auth-cookies.ts
+M	backend/lib/auth.ts
+M	backend/middleware.ts
+M	backend/package.json
+M	frontend/src/app/chat/page.tsx
+M	frontend/src/components/chat/ChatInput.tsx
+M	frontend/src/components/chat/LiveVoiceMode.tsx
+M	frontend/src/components/chat/LiveVoiceOrb.tsx
+A	frontend/src/components/chat/VoxideKeyReplacementCard.tsx
+A	frontend/src/components/chat/VoxideKeyReplacementModal.tsx
+M	frontend/src/hooks/useVoicePipeline.ts
+M	frontend/src/lib/voxide.ts
+M	tools/.changelog_state
+M	tools/readmadeprompt.txt
+
+README.md                                          |  93 ++++++-
+ backend/lib/auth-cookies.ts                        |  33 ++-
+ backend/lib/auth.ts                                |  70 +++--
+ backend/middleware.ts                              |   5 +-
+ backend/package.json                               |   2 +-
+ frontend/src/app/chat/page.tsx                     |  15 ++
+ frontend/src/components/chat/ChatInput.tsx         |  10 +-
+ frontend/src/components/chat/LiveVoiceMode.tsx     | 118 +++++----
+ frontend/src/components/chat/LiveVoiceOrb.tsx      | 134 ++++++----
+ .../components/chat/VoxideKeyReplacementCard.tsx   | 176 ++++++++++++
+ .../components/chat/VoxideKeyReplacementModal.tsx  | 212 +++++++++++++++
+ frontend/src/hooks/useVoicePipeline.ts             | 295 +++++++++++++++++++--
+ frontend/src/lib/voxide.ts                         | 159 +++++++++--
+ tools/.changelog_state                             |   4 +-
+ tools/readmadeprompt.txt                           |  71 +++++
+ 15 files changed, 1220 insertions(+), 177 deletions(-)
+```
