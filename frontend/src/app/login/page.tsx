@@ -9,6 +9,9 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/context/AuthContext";
 
+const DEMO_EMAIL = "demo@sabeel.com";
+const DEMO_PASSWORD = "B}u3N9^Z>_UE=,k";
+
 export default function LoginPage() {
   const router = useRouter();
   const { signIn, user } = useAuth();
@@ -97,6 +100,23 @@ export default function LoginPage() {
               <div className="flex-1">{errorMessage}</div>
             </div>
           )}
+
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+            <p className="font-semibold">Hackathon demo account</p>
+            <p className="mt-1 text-amber-900/80 dark:text-amber-200/80">
+              For judges and quick testing only — do not use this account for your own research.
+            </p>
+            <dl className="mt-2 space-y-1 font-mono text-[11px]">
+              <div className="flex flex-wrap gap-x-2">
+                <dt className="text-amber-800/70 dark:text-amber-300/70">Email</dt>
+                <dd>{DEMO_EMAIL}</dd>
+              </div>
+              <div className="flex flex-wrap gap-x-2">
+                <dt className="text-amber-800/70 dark:text-amber-300/70">Password</dt>
+                <dd>{DEMO_PASSWORD}</dd>
+              </div>
+            </dl>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
