@@ -115,10 +115,43 @@ function renderFormattedInline(text: string): React.ReactNode {
   return nodes.length > 0 ? nodes : text;
 }
 
+const SCORE_LINE_REGEX =
+  /^(\*{0,2}(?:🔥\s*)?(?:Score:\s*)?(\d{1,3})\/100(?:\s+ROAST\s+SCORE)?\*{0,2})(?:\s*[—–-]\s*(.*))?$/i;
+
 const LABEL_REGEX =
-  /^(\*{0,2}(?:Title|Description|Research Question|Candidate Question|Focus|Suggested Pivot|Pivot|Methodology|Why it works|Why this idea might fail|Score|ROAST SCORE|Roast Score|Final verdict|Damage control|What's Actually Wrong|Scope explosion|Weak research gap|Unclear methodology|Low originality|Missing variables|Measurement nightmare)\*{0,2}):\s*(.*)$/i;
+  /^(\*{0,2}(?:Title|Description|Research Question|Candidate Question|Focus|Suggested Pivot|Pivot|Methodology|Why it works|Why this idea might fail|Score|ROAST SCORE|Roast Score|Final verdict|Damage control|What's Actually Wrong|Scope explosion|Weak research gap|Weak counterfactual|Unclear methodology|Unclear measurement|Low originality|Missing variables|Measurement nightmare|Fatal flaws & blind spots|Submitted|The Paper Submitted|The Idea Submitted)\*{0,2}):\s*(.*)$/i;
 
 function renderLineWithFormatting(line: string): React.ReactNode {
+  // 1. Check for Score line: e.g. "72/100 ROAST SCORE" or "🔥 Score: 72/100 ROAST SCORE — Tag 1 • Tag 2"
+  const scoreMatch = line.match(SCORE_LINE_REGEX);
+  if (scoreMatch) {
+    const scoreNum = parseInt(scoreMatch[2], 10);
+    const tagText = scoreMatch[3];
+    const colorClass =
+      scoreNum >= 75
+        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+        : scoreNum >= 50
+        ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
+        : "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30";
+
+    return (
+      <div className="flex flex-wrap items-center gap-2 my-1">
+        <span
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold text-xs shadow-2xs ${colorClass}`}
+        >
+          <span>🔥</span>
+          <span>{scoreNum}/100 ROAST SCORE</span>
+        </span>
+        {tagText && (
+          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            {renderFormattedInline(tagText)}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // 2. Check for key-value labels:
   const match = line.match(LABEL_REGEX);
   if (match) {
     const rawLabel = match[1].replace(/\*/g, "").trim();
@@ -130,7 +163,27 @@ function renderLineWithFormatting(line: string): React.ReactNode {
       </span>
     );
   }
+
   return renderFormattedInline(line);
+}
+
+function normalizeContent(raw: string): string {
+  let text = raw.replace(/\r\n/g, "\n");
+
+  // Collapse isolated quotes across lines:
+  text = text.replace(/([“"])\s*\n+([^\n"”]+?)\n+([”"])/g, '"$2"');
+  text = text.replace(
+    /(THE\s+(?:PAPER|IDEA|RESEARCH)\s+SUBMITTED)\s*\n+["“']?\s*\n*([^"”'\n]+?)\s*\n*["”']?(?=\n|$)/gi,
+    '$1\n"$2"'
+  );
+
+  // Strip empty trailing dashes/bullets before EOF (cutoff cleanup)
+  text = text.replace(/\n+\s*[-*•]\s*$/g, "");
+
+  // Auto-bold unbolded "THE IDEA SUBMITTED" / "THE PAPER SUBMITTED"
+  text = text.replace(/^(THE\s+(?:PAPER|IDEA|RESEARCH)\s+SUBMITTED)$/gim, "**$1**");
+
+  return text;
 }
 
 type ContentBlock =
@@ -144,7 +197,8 @@ type ContentBlock =
   | { type: "paragraph"; lines: string[] };
 
 function parseBlocks(content: string): ContentBlock[] {
-  const rawLines = content.replace(/\r\n/g, "\n").split("\n");
+  const normalized = normalizeContent(content);
+  const rawLines = normalized.split("\n");
   const blocks: ContentBlock[] = [];
   let i = 0;
 
@@ -332,14 +386,14 @@ function FormattedContent({ content }: { content: string }) {
             return <hr key={idx} className="border-zinc-200 dark:border-zinc-800 my-2" />;
           case "quote":
             return (
-              <blockquote
+              <div
                 key={idx}
-                className="border-l-2 border-zinc-300 dark:border-zinc-700 pl-3 italic text-zinc-600 dark:text-zinc-300 my-1.5 space-y-1"
+                className="rounded-xl border border-zinc-200/90 bg-zinc-50/70 dark:border-zinc-800 dark:bg-zinc-800/40 px-3.5 py-3 my-2 space-y-1.5 text-xs sm:text-sm shadow-2xs"
               >
                 {block.text.split("\n").map((ql, qIdx) => (
-                  <p key={qIdx}>{renderLineWithFormatting(ql)}</p>
+                  <div key={qIdx}>{renderLineWithFormatting(ql)}</div>
                 ))}
-              </blockquote>
+              </div>
             );
           case "list":
             return (

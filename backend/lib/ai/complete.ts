@@ -151,6 +151,7 @@ CRITICAL CONSTRAINT: DO NOT INTERROGATE THE USER WITH QUESTIONS.
     body: JSON.stringify({
       model,
       temperature: 0.7,
+      max_tokens: 3500,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: enhancedSystemPrompt },
@@ -181,6 +182,7 @@ CRITICAL CONSTRAINT: DO NOT INTERROGATE THE USER WITH QUESTIONS.
           body: JSON.stringify({
             model,
             temperature: 0.7,
+            max_tokens: 3500,
             messages: [
               {
                 role: 'system',
