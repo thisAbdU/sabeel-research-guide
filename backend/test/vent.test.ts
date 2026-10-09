@@ -355,4 +355,54 @@ describe('Vent Mode Decision & Integration Tests', () => {
     await completeChat('vent', [], 'AI in education')
     assert.equal(scholarXivCalled, false, 'Vent mode should narrow broad topic before searching ScholarXiv')
   })
+
+  // TEST 11 — Proactive narrowing allows concrete researchDirections on broad topics
+  it('TEST 11: Proactive narrowing allows researchDirections to be returned for broad ideas instead of forcing empty list', async () => {
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  content: 'AI is expansive. Here are 3 proactive angles we can explore:',
+                  researchDirections: [
+                    {
+                      title: 'Writing Feedback in Undergraduates',
+                      description: 'Examines draft revisions.',
+                      researchQuestion: 'How does AI feedback impact essay revision quality?',
+                    },
+                    {
+                      title: 'Diagnostic Triage in Rural Healthcare',
+                      description: 'Investigates frontline nurse adoption.',
+                      researchQuestion: 'What factors influence clinical adoption of AI triage?',
+                    },
+                  ],
+                  sources: [],
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 }
+      )
+    }) as typeof fetch
+
+    const result = await completeChat('vent', [], 'I want to research AI.')
+    assert.equal(result.researchDirections.length, 2, 'Must preserve proactive researchDirections for broad ideas')
+    assert.equal(result.researchDirections[0].title, 'Writing Feedback in Undergraduates')
+  })
+
+  // TEST 12 — Multi-turn conversation transitions to focused search without endless questioning
+  it('TEST 12: Multi-turn input with specific context transitions to focused search without infinite questioning', () => {
+    const history: ChatTurn[] = [
+      { role: 'user', content: 'I want to study healthcare burnout.' },
+      { role: 'assistant', content: 'Burnout is a critical issue. Here are 3 angles: nurse shifts, ICU workload, or physician turnover.' },
+    ]
+    const currentMessage = 'I want to focus on nurses working ICU night shifts and medication errors.'
+    const decision = assessVentReadiness(history, currentMessage)
+    assert.equal(decision.shouldSearch, true, 'Multi-turn follow-up with concrete context must trigger search')
+    assert.equal(decision.state, 'focused')
+    assert.ok(decision.query)
+  })
 })

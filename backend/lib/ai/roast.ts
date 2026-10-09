@@ -162,7 +162,7 @@ CRITICAL INSTRUCTIONS FOR PAPER ROAST:
 3. Clearly distinguish what the paper actually claims/demonstrates from your critique.
 4. Do NOT pretend to know internal details, dataset specifics, or equations that are not present in the provided summary.
 5. In your markdown content, refer to the paper as a clickable markdown link using its exact URL: [${paper.title}](${paper.url}).
-6. Follow the required Roast structure (🔥 The Roast, 🚨 What's Actually Wrong, 🧠 What the Research Says, ✨ How We Fix It, 🎯 Better Research Questions).
+6. Follow the required Gen Z Roast structure (# YOUR PAPER HAS SOME EXPLAINING TO DO (MAYBE), **THE PAPER SUBMITTED**, **[Score]/100 ROAST SCORE**, 🔥 The Roast, 💀 Fatal flaws & blind spots, 🧠 What the literature actually says, 🛠️ Damage control: Fix the research, 🎯 Final verdict).
 7. In your JSON response, include this exact paper in the "sources" array.`
     }
 
@@ -190,9 +190,9 @@ ${sourceContext}
 
 CRITICAL INSTRUCTIONS FOR TOPIC ROAST:
 1. Roast the RESEARCH IDEA, NOT the researcher personally. Keep it witty, humorous, Gen-Z friendly, but academically constructive.
-2. Ground "🧠 What the Research Says" in the real ScholarXiv literature provided above.
+2. Ground "🧠 What the literature actually says" in the real ScholarXiv literature provided above.
 3. Whenever citing or mentioning any of the provided papers, format its title as a clickable markdown link: [Paper Title](URL).
-4. Point out what's actually wrong with the topic scope (too broad, population unclear, variables missing, already studied in literature).
+4. Follow the required Gen Z structure (# YOUR RESEARCH IDEA SUCKS (MAYBE), **THE IDEA SUBMITTED**, **[Score]/100 ROAST SCORE**, 🔥 The Roast, 💀 Why this idea might fail, 🧠 What the literature actually says, 🛠️ Damage control: Fix the idea with SUGGESTED PIVOT, 🎯 Final verdict).
 5. Suggest 2-4 concrete, actionable ways to improve the idea and provide better candidate research questions in "researchDirections".
 6. In your JSON response, include these exact sources in the "sources" array.
 7. NEVER invent papers, citations, or unsupported novelty claims.`
@@ -202,6 +202,7 @@ CRITICAL INSTRUCTIONS FOR TOPIC ROAST:
 The user wants you to roast their research topic: "${context.query}".
 No matching ScholarXiv literature was found (or search was temporarily unavailable).
 - Do NOT invent fake papers, authors, or citations.
+- Follow the Gen Z Roast structure (# YOUR RESEARCH IDEA SUCKS (MAYBE), **THE IDEA SUBMITTED**, **[Score]/100 ROAST SCORE**, 🔥 The Roast, 💀 Why this idea might fail, 🛠️ Damage control: Fix the idea with SUGGESTED PIVOT, 🎯 Final verdict).
 - Proceed with roasting the scope, clarity, feasibility, and methodology of the idea itself.
 - Keep "sources": [].`
 }

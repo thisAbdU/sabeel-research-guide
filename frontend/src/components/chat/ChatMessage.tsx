@@ -17,7 +17,9 @@ interface ChatMessageProps {
 }
 
 function renderFormattedInline(text: string): React.ReactNode {
-  const pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|~~([^~]+)~~|(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
+  // Precedence: links, bold-italic, bold, italic, code, strikethrough, bare URLs
+  const pattern =
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*\*([^*]+)\*\*\*|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|`([^`]+)`|~~([^~]+)~~|(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
 
   const nodes: React.ReactNode[] = [];
   let lastIndex = 0;
@@ -43,24 +45,61 @@ function renderFormattedInline(text: string): React.ReactNode {
         </a>
       );
     } else if (match[3]) {
+      // Bold italic: ***text***
       nodes.push(
-        <strong key={`bold-${match.index}`} className="font-semibold text-zinc-900 dark:text-zinc-100">
-          {match[3]}
+        <strong key={`bi-${match.index}`} className="font-semibold text-zinc-900 dark:text-zinc-100">
+          <em className="italic">{match[3]}</em>
         </strong>
       );
     } else if (match[4]) {
-      nodes.push(<React.Fragment key={`strike-${match.index}`}>{match[4]}</React.Fragment>);
+      // Bold: **text**
+      nodes.push(
+        <strong key={`b-${match.index}`} className="font-semibold text-zinc-900 dark:text-zinc-100">
+          {match[4]}
+        </strong>
+      );
     } else if (match[5]) {
+      // Bold: __text__
+      nodes.push(
+        <strong key={`b2-${match.index}`} className="font-semibold text-zinc-900 dark:text-zinc-100">
+          {match[5]}
+        </strong>
+      );
+    } else if (match[6]) {
+      // Italic: *text*
+      nodes.push(
+        <em key={`em-${match.index}`} className="italic text-zinc-800 dark:text-zinc-200">
+          {match[6]}
+        </em>
+      );
+    } else if (match[7]) {
+      // Inline code: `text`
+      nodes.push(
+        <code
+          key={`code-${match.index}`}
+          className="rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-zinc-800 dark:text-zinc-200"
+        >
+          {match[7]}
+        </code>
+      );
+    } else if (match[8]) {
+      // Strikethrough: ~~text~~
+      nodes.push(
+        <span key={`strike-${match.index}`} className="line-through text-zinc-400">
+          {match[8]}
+        </span>
+      );
+    } else if (match[9]) {
       // Bare URL
       nodes.push(
         <a
           key={`url-${match.index}`}
-          href={match[5]}
+          href={match[9]}
           target="_blank"
           rel="noopener noreferrer"
           className="font-medium text-blue-600 dark:text-blue-400 hover:underline decoration-blue-400/40 inline-flex items-center gap-0.5 break-all transition-colors"
         >
-          <span>{match[5]}</span>
+          <span>{match[9]}</span>
           <ExternalLink className="inline h-3 w-3 shrink-0 ml-0.5 opacity-80" />
         </a>
       );
@@ -76,55 +115,270 @@ function renderFormattedInline(text: string): React.ReactNode {
   return nodes.length > 0 ? nodes : text;
 }
 
-function headingText(line: string) {
-  const match = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/);
-  return match ? match[1] : null;
+const LABEL_REGEX =
+  /^(\*{0,2}(?:Title|Description|Research Question|Candidate Question|Focus|Suggested Pivot|Pivot|Methodology|Why it works|Why this idea might fail|Score|ROAST SCORE|Roast Score|Final verdict|Damage control|What's Actually Wrong|Scope explosion|Weak research gap|Unclear methodology|Low originality|Missing variables|Measurement nightmare)\*{0,2}):\s*(.*)$/i;
+
+function renderLineWithFormatting(line: string): React.ReactNode {
+  const match = line.match(LABEL_REGEX);
+  if (match) {
+    const rawLabel = match[1].replace(/\*/g, "").trim();
+    const rest = match[2];
+    return (
+      <span>
+        <strong className="font-semibold text-zinc-900 dark:text-zinc-100">{rawLabel}:</strong>{" "}
+        {renderFormattedInline(rest)}
+      </span>
+    );
+  }
+  return renderFormattedInline(line);
+}
+
+type ContentBlock =
+  | { type: "heading"; level: number; text: string }
+  | { type: "hr" }
+  | { type: "quote"; text: string }
+  | {
+      type: "list";
+      items: Array<{ marker: string; title: string; details: string[] }>;
+    }
+  | { type: "paragraph"; lines: string[] };
+
+function parseBlocks(content: string): ContentBlock[] {
+  const rawLines = content.replace(/\r\n/g, "\n").split("\n");
+  const blocks: ContentBlock[] = [];
+  let i = 0;
+
+  const isHeading = (line: string) => /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+  const isHr = (line: string) => /^\s*(?:---|\*\*\*|___)\s*$/.test(line);
+  const isQuote = (line: string) => /^\s*>\s*(.*)$/.exec(line);
+  const isBullet = (line: string) => /^\s*([*\-•]|\d+\.)\s+(.*)$/.exec(line);
+  const isContinuation = (line: string) =>
+    /^\s{2,}\S/.test(line) ||
+    /^(?:Description|Research Question|Candidate Question|Focus|Suggested Pivot|Pivot|Methodology|Why it works|Measurement):\s*/i.test(
+      line.trim()
+    );
+
+  while (i < rawLines.length) {
+    const line = rawLines[i];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      i++;
+      continue;
+    }
+
+    // 1. Heading
+    const headMatch = isHeading(line);
+    if (headMatch) {
+      blocks.push({
+        type: "heading",
+        level: headMatch[1].length,
+        text: headMatch[2],
+      });
+      i++;
+      continue;
+    }
+
+    // 2. Horizontal Rule
+    if (isHr(line)) {
+      blocks.push({ type: "hr" });
+      i++;
+      continue;
+    }
+
+    // 3. Blockquote
+    const quoteMatch = isQuote(line);
+    if (quoteMatch) {
+      const quoteLines = [quoteMatch[1]];
+      i++;
+      while (i < rawLines.length && isQuote(rawLines[i])) {
+        const qm = isQuote(rawLines[i]);
+        if (qm) quoteLines.push(qm[1]);
+        i++;
+      }
+      blocks.push({ type: "quote", text: quoteLines.join("\n") });
+      continue;
+    }
+
+    // 4. List (Ordered or Unordered)
+    const bulletMatch = isBullet(line);
+    if (bulletMatch) {
+      const items: Array<{ marker: string; title: string; details: string[] }> = [];
+
+      while (i < rawLines.length) {
+        const currLine = rawLines[i];
+        const currTrimmed = currLine.trim();
+
+        if (!currTrimmed) {
+          // Lookahead for next continuation or next bullet item
+          let nextIdx = i + 1;
+          while (nextIdx < rawLines.length && !rawLines[nextIdx].trim()) {
+            nextIdx++;
+          }
+          if (nextIdx < rawLines.length) {
+            const nextLine = rawLines[nextIdx];
+            if (isBullet(nextLine)) {
+              i = nextIdx;
+              continue;
+            }
+            if (isContinuation(nextLine) && items.length > 0) {
+              items[items.length - 1].details.push(nextLine.trim());
+              i = nextIdx + 1;
+              continue;
+            }
+          }
+          break;
+        }
+
+        const bMatch = isBullet(currLine);
+        if (bMatch) {
+          items.push({
+            marker: bMatch[1],
+            title: bMatch[2],
+            details: [],
+          });
+          i++;
+          continue;
+        }
+
+        if (items.length > 0 && isContinuation(currLine)) {
+          items[items.length - 1].details.push(currTrimmed);
+          i++;
+          continue;
+        }
+
+        break;
+      }
+
+      blocks.push({ type: "list", items });
+      continue;
+    }
+
+    // 5. Paragraph
+    const paraLines: string[] = [];
+    while (i < rawLines.length) {
+      const currLine = rawLines[i];
+      const currTrimmed = currLine.trim();
+
+      if (!currTrimmed) {
+        i++;
+        break;
+      }
+
+      if (isHeading(currLine) || isHr(currLine) || isQuote(currLine) || isBullet(currLine)) {
+        break;
+      }
+
+      paraLines.push(currTrimmed);
+      i++;
+    }
+
+    if (paraLines.length > 0) {
+      blocks.push({ type: "paragraph", lines: paraLines });
+    }
+  }
+
+  return blocks;
 }
 
 function FormattedContent({ content }: { content: string }) {
-  const paragraphs = content.split(/\n\n+/);
+  const blocks = React.useMemo(() => parseBlocks(content), [content]);
 
   return (
-    <div className="space-y-3 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
-      {paragraphs.map((para, i) => {
-        const lines = para.split("\n").filter((line) => line.trim().length > 0);
-        const isList = lines.length > 0 && lines.every((line) => /^\s*([*\-•]|\d+\.)\s+/.test(line));
-
-        if (isList) {
-          return (
-            <ul key={i} className="space-y-1.5 my-2">
-              {lines.map((line, lineIdx) => {
-                const markerMatch = line.match(/^\s*([*\-•]|\d+\.)\s+/);
-                const marker = markerMatch ? markerMatch[1] : "•";
-                const cleanLine = line.replace(/^\s*([*\-•]|\d+\.)\s+/, "");
-                return (
-                  <li key={lineIdx} className="flex items-start gap-2">
-                    <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500 shrink-0 select-none mt-0.5">
-                      {marker}
-                    </span>
-                    <span className="flex-1">{renderFormattedInline(cleanLine)}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          );
+    <div className="space-y-2.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200">
+      {blocks.map((block, idx) => {
+        switch (block.type) {
+          case "heading": {
+            if (block.level === 1) {
+              return (
+                <h1
+                  key={idx}
+                  className="text-base sm:text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-50 pt-1 pb-1 border-b border-zinc-200/80 dark:border-zinc-800"
+                >
+                  {renderFormattedInline(block.text)}
+                </h1>
+              );
+            }
+            if (block.level === 2) {
+              return (
+                <h2
+                  key={idx}
+                  className="text-sm sm:text-base font-bold text-zinc-900 dark:text-zinc-100 pt-1"
+                >
+                  {renderFormattedInline(block.text)}
+                </h2>
+              );
+            }
+            if (block.level === 3) {
+              return (
+                <h3
+                  key={idx}
+                  className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 pt-1 flex items-center gap-1.5"
+                >
+                  {renderFormattedInline(block.text)}
+                </h3>
+              );
+            }
+            return (
+              <h4
+                key={idx}
+                className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 pt-0.5"
+              >
+                {renderFormattedInline(block.text)}
+              </h4>
+            );
+          }
+          case "hr":
+            return <hr key={idx} className="border-zinc-200 dark:border-zinc-800 my-2" />;
+          case "quote":
+            return (
+              <blockquote
+                key={idx}
+                className="border-l-2 border-zinc-300 dark:border-zinc-700 pl-3 italic text-zinc-600 dark:text-zinc-300 my-1.5 space-y-1"
+              >
+                {block.text.split("\n").map((ql, qIdx) => (
+                  <p key={qIdx}>{renderLineWithFormatting(ql)}</p>
+                ))}
+              </blockquote>
+            );
+          case "list":
+            return (
+              <ul key={idx} className="space-y-2 my-2">
+                {block.items.map((item, itemIdx) => {
+                  const marker = /^\d+\.$/.test(item.marker) ? item.marker : "•";
+                  return (
+                    <li key={itemIdx} className="space-y-1">
+                      <div className="flex items-start gap-2">
+                        <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500 shrink-0 select-none mt-0.5">
+                          {marker}
+                        </span>
+                        <div className="flex-1 space-y-1">
+                          <div>{renderLineWithFormatting(item.title)}</div>
+                          {item.details.length > 0 && (
+                            <div className="space-y-1 pl-2.5 border-l-2 border-zinc-200 dark:border-zinc-800 ml-0.5 mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                              {item.details.map((det, dIdx) => (
+                                <div key={dIdx}>{renderLineWithFormatting(det)}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            );
+          case "paragraph":
+            return (
+              <div key={idx} className="space-y-1">
+                {block.lines.map((line, lIdx) => (
+                  <p key={lIdx}>{renderLineWithFormatting(line)}</p>
+                ))}
+              </div>
+            );
+          default:
+            return null;
         }
-
-        return (
-          <div key={i} className="space-y-1.5">
-            {lines.map((line, lineIdx) => {
-              const heading = headingText(line);
-              if (heading) {
-                return (
-                  <h3 key={lineIdx} className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                    {renderFormattedInline(heading)}
-                  </h3>
-                );
-              }
-              return <p key={lineIdx}>{renderFormattedInline(line)}</p>;
-            })}
-          </div>
-        );
       })}
     </div>
   );

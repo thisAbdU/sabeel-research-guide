@@ -69,11 +69,19 @@ export async function completeChat(
         enhancedSystemPrompt += `\n\nNOTE ON LITERATURE SEARCH:\nA literature search for "${decision.focusedDirection || decision.query}" was attempted on ScholarXiv, but no directly matching papers were retrieved (or the search service was temporarily unavailable).\n- Do NOT fabricate or invent papers, authors, or links.\n- State conversationally that you checked the literature but didn't find direct matches right now.\n- Suggest ways the researcher could broaden, reframe, or refine their research question.\n- Keep "sources": [].`
       }
     } else if (decision.state === 'broad') {
-      allowDirections = false
-      const missing = decision.missingDimensions?.join(', ') || 'target population, specific outcome, or educational setting'
-      enhancedSystemPrompt += `\n\nVENT STAGE: NARROWING & CLARIFICATION\nThe user's research idea is currently too broad for an effective literature search.\nMissing dimensions: ${missing}.\n- Do NOT claim you searched ScholarXiv or cite papers.\n- Acknowledge their topic and ask 1–3 targeted, thoughtful narrowing questions to help them define their core phenomenon, population, outcome/variable, or context.\n- Do NOT overwhelm them with a long questionnaire; keep it conversational.\n- Keep "sources": [] and "researchDirections": [].`
+      allowDirections = true
+      enhancedSystemPrompt += `\n\nVENT STAGE: PROACTIVE NARROWING & ANGLE SUGGESTION\nThe user's research idea is broad or exploratory.
+CRITICAL CONSTRAINT: DO NOT INTERROGATE THE USER WITH QUESTIONS.
+- NEVER ask a barrage of diagnostic questions (e.g. "What is your population? What outcome are you measuring? What context?"). This exhausts the researcher.
+- Instead, DO THE NARROWING WORK FOR THEM:
+  1. Briefly validate their research intuition in 1–2 encouraging sentences.
+  2. Proactively present 2–3 concrete, diverse angles/ways this topic can be narrowed down (suggesting plausible populations, outcomes, and settings). Write them as clean markdown sections (e.g. "### 1. [Angle Title]") with **Focus** and **Candidate Question**, or as cohesive narrative paragraphs—never as raw pseudo-code dumps like "- Title: *...* \n Description: ... \n Research Question: *...*".
+  3. Include 2–4 concrete "researchDirections" in your JSON output. Each MUST have a clear "title", "description", and a specific candidate "researchQuestion".
+  4. End with AT MOST ONE gentle, low-effort choice prompt (e.g., "Do any of these angles catch your interest, or do you have a different direction in mind?").
+- Do NOT claim you searched ScholarXiv or cite papers. Keep "sources": [].`
     } else if (decision.state === 'conversational') {
-      enhancedSystemPrompt += `\n\nVENT STAGE: CONVERSATIONAL CONTINUATION\nThe user is continuing the conversation without changing their core research focus.\n- Respond conversationally to their message.\n- Do NOT perform a new literature search.\n- Maintain previous context and continue developing the research plan or addressing their specific question.\n- Keep "sources": [].`
+      allowDirections = true
+      enhancedSystemPrompt += `\n\nVENT STAGE: CONVERSATIONAL CONTINUATION\nThe user is continuing the conversation.\n- Respond conversationally and constructively to their message.\n- Help them develop or refine their chosen direction without peppering them with endless questions.\n- Provide 1–3 refined "researchDirections" if applicable, otherwise [].\n- Keep "sources": [].`
     }
   } else if (mode === 'roast') {
     const roastContext = await prepareRoastContext(history, effectiveMessage)
